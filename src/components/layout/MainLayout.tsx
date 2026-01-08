@@ -45,11 +45,15 @@ export const MainLayout: React.FC = () => {
     }
   }, [isSettingsPage, location.state]);
 
-  // Handle status bar style based on theme
+  // Handle status bar style based on theme and sidebar state
   useEffect(() => {
     if (isNative) {
       const updateStatusBar = async () => {
         try {
+          // When sidebar is open, use sidebar's theme colors
+          // When sidebar is closed, use main theme colors
+          const isLightTheme = !isDark;
+          
           // Set status bar style based on theme
           await StatusBar.setStyle({
             style: isDark ? Style.Dark : Style.Light
@@ -72,7 +76,7 @@ export const MainLayout: React.FC = () => {
     if (metaThemeColor) {
       metaThemeColor.setAttribute('content', isDark ? '#111827' : '#ffffff');
     }
-  }, [isDark]);
+  }, [isDark, sidebarOpen]);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const closeSidebar = () => setSidebarOpen(false);
@@ -83,7 +87,7 @@ export const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className={`h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className={`h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Header with menu button on left, model selector on right */}
       <header className={`h-14 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} border-b flex items-center justify-between px-4 shrink-0`}>
         <div className="flex items-center gap-3">
