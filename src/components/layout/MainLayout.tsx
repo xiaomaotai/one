@@ -50,13 +50,12 @@ export const MainLayout: React.FC = () => {
     if (isNative) {
       const updateStatusBar = async () => {
         try {
-          // When sidebar is open, use sidebar's theme colors
-          // When sidebar is closed, use main theme colors
-          const isLightTheme = !isDark;
-          
-          // Set status bar style based on theme
+          // Style.Light = 浅色文字/图标（用于深色背景）
+          // Style.Dark = 深色文字/图标（用于浅色背景）
+          // 深色模式：深色背景 -> 需要浅色文字 -> Style.Light
+          // 浅色模式：浅色背景 -> 需要深色文字 -> Style.Dark
           await StatusBar.setStyle({
-            style: isDark ? Style.Dark : Style.Light
+            style: isDark ? Style.Light : Style.Dark
           });
           
           // Set status bar background color
@@ -187,7 +186,7 @@ export const MainLayout: React.FC = () => {
       {/* Overlay backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          className={`fixed inset-0 z-40 ${isDark ? 'bg-black bg-opacity-50' : 'bg-gray-500 bg-opacity-30'}`}
           onClick={closeSidebar}
         />
       )}
