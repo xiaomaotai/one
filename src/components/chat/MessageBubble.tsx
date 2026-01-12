@@ -77,7 +77,7 @@ interface CodeBlockProps {
   isDark: boolean;
 }
 
-const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, isDark }) => {
+const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
