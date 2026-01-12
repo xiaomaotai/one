@@ -115,10 +115,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   }, [content]);
 
-  // Focus on mount
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
+  // Don't auto-focus on mobile to prevent keyboard from popping up unexpectedly
+  // Users can tap the input to focus when they want to type
 
   const handleSubmit = () => {
     const trimmed = content.trim();

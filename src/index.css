@@ -305,10 +305,9 @@ button:active {
   background: rgba(59, 130, 246, 0.3);
 }
 
-/* User message selection - use contrasting color for blue bubbles */
-/* Dark background with white text for visibility */
+/* User message selection - white highlight with dark text for blue bubbles */
 .user-message-content::selection,
 .user-message-content *::selection {
-  background: rgba(0, 0, 0, 0.4);
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.5);
+  color: #1e40af;
 }
