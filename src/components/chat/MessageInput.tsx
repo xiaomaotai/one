@@ -145,56 +145,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     console.log('Platform detected:', platform, 'isNativeApp:', isNativeApp);
     
     if (platform === 'android' || platform === 'ios') {
-      // Native app - use Capacitor Camera plugin
+      // Native app - use Capacitor Camera plugin with proper permission flow
       console.log('Using Capacitor Camera for native platform');
       try {
-        // Try pickImages first for better gallery experience
-        try {
-          const result = await Camera.pickImages({
-            quality: 90,
-            limit: Math.max(1, 4 - images.length),
-          });
-          
-          console.log('pickImages result:', result.photos?.length);
-          
-          if (result.photos && result.photos.length > 0) {
-            const newImages: ImageAttachment[] = [];
-            
-            for (const photo of result.photos) {
-              if (photo.webPath) {
-                try {
-                  const response = await fetch(photo.webPath);
-                  const blob = await response.blob();
-                  const dataUrl = await new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                  });
-                  
-                  const compressed = await compressImageFromDataUrl(dataUrl);
-                  newImages.push({
-                    id: generateId(),
-                    data: compressed,
-                    mimeType: photo.format ? `image/${photo.format}` : 'image/jpeg',
-                    name: `photo_${Date.now()}.jpg`
-                  });
-                } catch (e) {
-                  console.error('处理图片失败:', e);
-                }
-              }
-            }
-            
-            if (newImages.length > 0) {
-              setImages(prev => [...prev, ...newImages].slice(0, 4));
-              return;
-            }
-          }
-        } catch (pickError) {
-          console.log('pickImages failed, trying getPhoto:', pickError);
-        }
-        
-        // Fallback to getPhoto with prompt
+        // Use getPhoto with Prompt to let user choose camera or gallery
+        // This will automatically request permissions when needed
         const photo = await Camera.getPhoto({
           quality: 90,
           allowEditing: false,
