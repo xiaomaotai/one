@@ -304,3 +304,10 @@ button:active {
 ::selection {
   background: rgba(59, 130, 246, 0.3);
 }
+
+/* User message selection - use different color for blue bubbles */
+.user-message-content::selection,
+.user-message-content *::selection {
+  background: rgba(255, 255, 255, 0.4);
+  color: #1e3a5f;
+}

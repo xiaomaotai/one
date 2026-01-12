@@ -285,7 +285,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
             
             {/* Message Content - optimized text size */}
             <div 
-              className="message-content break-words text-[15px] leading-relaxed w-full" 
+              className={`message-content break-words text-[15px] leading-relaxed w-full ${isUser ? 'user-message-content' : ''}`}
               style={{ 
                 wordBreak: 'break-word', 
                 overflowWrap: 'break-word',
