@@ -89,7 +89,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
   };
 
   return (
-    <div className="relative my-2 rounded-lg bg-gray-900 w-full" style={{ maxWidth: '100%', overflow: 'hidden' }}>
+    <div 
+      className="code-block-container relative my-2 rounded-lg bg-gray-900"
+      style={{ 
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden'
+      }}
+    >
       {/* Header with language and copy button */}
       <div className="flex items-center justify-between px-2.5 py-1 bg-gray-800 text-[11px]">
         <span className="text-gray-400">{language || 'code'}</span>
@@ -116,14 +123,29 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
       </div>
       {/* Code content - independent horizontal scroll */}
       <div 
-        className="overflow-x-auto overflow-y-hidden"
+        className="code-scroll-area"
         style={{ 
+          overflowX: 'auto',
+          overflowY: 'hidden',
           WebkitOverflowScrolling: 'touch',
-          overscrollBehaviorX: 'contain'
+          overscrollBehavior: 'contain'
         }}
       >
-        <pre className="p-2.5 text-[13px] leading-relaxed m-0">
-          <code className="text-gray-100 whitespace-pre block">{code}</code>
+        <pre 
+          className="p-2.5 text-[13px] leading-relaxed"
+          style={{ margin: 0, background: 'transparent' }}
+        >
+          <code 
+            className="text-gray-100"
+            style={{ 
+              whiteSpace: 'pre',
+              display: 'block',
+              width: 'fit-content',
+              minWidth: '100%'
+            }}
+          >
+            {code}
+          </code>
         </pre>
       </div>
     </div>
@@ -211,7 +233,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
 
   return (
     <>
-      <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
+      <div 
+        className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}
+        style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}
+      >
         {/* Avatar for assistant - smaller on mobile */}
         {!isUser && (
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 via-purple-500 to-blue-400 flex items-center justify-center mr-2 flex-shrink-0 text-white text-[10px] font-bold mt-0.5">
@@ -219,15 +244,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
           </div>
         )}
         
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[75%] min-w-0`}>
+        <div 
+          className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+          style={{ 
+            maxWidth: '85%',
+            minWidth: 0,
+            overflow: 'hidden'
+          }}
+        >
           <div
-            className={`rounded-2xl px-3 py-2.5 min-w-0 overflow-hidden ${
+            className={`rounded-2xl px-3 py-2.5 ${
               isUser
                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm'
                 : isDark 
                   ? 'bg-gray-700/90 text-gray-100 rounded-bl-sm'
                   : 'bg-gray-100 text-gray-900 rounded-bl-sm'
             }`}
+            style={{
+              maxWidth: '100%',
+              minWidth: 0,
+              overflow: 'hidden'
+            }}
           >
             {/* Images - optimized for mobile */}
             {message.images && message.images.length > 0 && (

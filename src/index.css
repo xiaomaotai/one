@@ -77,6 +77,10 @@ body {
 .message-content {
   line-height: 1.7;
   word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-content p {
@@ -93,6 +97,36 @@ body {
   border-radius: 0.25rem;
   font-size: 0.875em;
   font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+/* Code block container - prevent overflow */
+.code-block-container {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Code block scroll area - enable horizontal scroll */
+.code-scroll-area {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Code block scrollbar */
+.code-scroll-area::-webkit-scrollbar {
+  height: 4px;
+}
+
+.code-scroll-area::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.code-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
 }
 
 .message-content pre {
