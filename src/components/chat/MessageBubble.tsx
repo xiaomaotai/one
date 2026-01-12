@@ -89,9 +89,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, isDark }) => {
   };
 
   return (
-    <div className={`relative my-2 rounded-lg overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-800'}`}>
+    <div className="relative my-2 rounded-lg overflow-hidden bg-gray-900">
       {/* Header with language and copy button */}
-      <div className={`flex items-center justify-between px-2.5 py-1 ${isDark ? 'bg-gray-800' : 'bg-gray-700'} text-[11px]`}>
+      <div className="flex items-center justify-between px-2.5 py-1 bg-gray-800 text-[11px]">
         <span className="text-gray-400">{language || 'code'}</span>
         <button
           onClick={handleCopy}
@@ -225,7 +225,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
             {message.images && message.images.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {message.images.map((img) => (
-                  <div key={img.id} className="relative overflow-hidden rounded-lg bg-gray-800">
+                  <div key={img.id} className={`relative overflow-hidden rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}>
                     <img
                       src={img.data}
                       alt={img.name || '图片'}
