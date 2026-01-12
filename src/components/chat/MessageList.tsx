@@ -117,7 +117,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
   return (
     <div 
       ref={containerRef}
-      className="flex-1 overflow-y-auto px-3 py-3"
+      className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3"
       onScroll={checkIfAtBottom}
     >
       <div className="max-w-3xl mx-auto space-y-3">

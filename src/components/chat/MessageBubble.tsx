@@ -89,13 +89,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
   };
 
   return (
-    <div className="relative my-2 rounded-lg overflow-hidden bg-gray-900">
+    <div className="relative my-2 rounded-lg bg-gray-900 w-full" style={{ maxWidth: '100%', overflow: 'hidden' }}>
       {/* Header with language and copy button */}
       <div className="flex items-center justify-between px-2.5 py-1 bg-gray-800 text-[11px]">
         <span className="text-gray-400">{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-gray-400 active:text-white transition-colors"
+          className="flex items-center gap-1 text-gray-400 active:text-white transition-colors flex-shrink-0"
         >
           {copied ? (
             <>
@@ -114,10 +114,18 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
           )}
         </button>
       </div>
-      {/* Code content - smaller font on mobile */}
-      <pre className="p-2.5 overflow-x-auto text-[13px] leading-relaxed">
-        <code className="text-gray-100 whitespace-pre">{code}</code>
-      </pre>
+      {/* Code content - independent horizontal scroll */}
+      <div 
+        className="overflow-x-auto overflow-y-hidden"
+        style={{ 
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehaviorX: 'contain'
+        }}
+      >
+        <pre className="p-2.5 text-[13px] leading-relaxed m-0">
+          <code className="text-gray-100 whitespace-pre block">{code}</code>
+        </pre>
+      </div>
     </div>
   );
 };
@@ -211,9 +219,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
           </div>
         )}
         
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[75%]`}>
+        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[75%] min-w-0`}>
           <div
-            className={`rounded-2xl px-3 py-2.5 ${
+            className={`rounded-2xl px-3 py-2.5 min-w-0 overflow-hidden ${
               isUser
                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm'
                 : isDark 
@@ -239,7 +247,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
             )}
             
             {/* Message Content - optimized text size */}
-            <div className="message-content break-words text-[15px] leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            <div 
+              className="message-content break-words text-[15px] leading-relaxed w-full" 
+              style={{ 
+                wordBreak: 'break-word', 
+                overflowWrap: 'break-word',
+                minWidth: 0,
+                maxWidth: '100%'
+              }}
+            >
               {isStreaming && !message.content ? (
                 <LoadingDots />
               ) : message.content ? (
