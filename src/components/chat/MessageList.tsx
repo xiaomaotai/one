@@ -117,10 +117,10 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
   return (
     <div 
       ref={containerRef}
-      className="flex-1 overflow-y-auto px-4 py-4"
+      className="flex-1 overflow-y-auto px-3 py-3"
       onScroll={checkIfAtBottom}
     >
-      <div className="max-w-3xl mx-auto space-y-4">
+      <div className="max-w-3xl mx-auto space-y-3">
         {messages.map((message) => (
           <MessageBubble
             key={message.id}

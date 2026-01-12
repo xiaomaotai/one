@@ -91,22 +91,22 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, isDark }) => {
   return (
     <div className={`relative my-2 rounded-lg overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-800'}`}>
       {/* Header with language and copy button */}
-      <div className={`flex items-center justify-between px-3 py-1.5 ${isDark ? 'bg-gray-800' : 'bg-gray-700'} text-xs`}>
+      <div className={`flex items-center justify-between px-2.5 py-1 ${isDark ? 'bg-gray-800' : 'bg-gray-700'} text-[11px]`}>
         <span className="text-gray-400">{language || 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-1 text-gray-400 active:text-white transition-colors"
         >
           {copied ? (
             <>
-              <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span className="text-green-400">已复制</span>
             </>
           ) : (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <span>复制</span>
@@ -114,8 +114,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, isDark }) => {
           )}
         </button>
       </div>
-      {/* Code content */}
-      <pre className="p-3 overflow-x-auto text-sm">
+      {/* Code content - smaller font on mobile */}
+      <pre className="p-2.5 overflow-x-auto text-[13px] leading-relaxed">
         <code className="text-gray-100 whitespace-pre">{code}</code>
       </pre>
     </div>
@@ -203,33 +203,33 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
 
   return (
     <>
-      <div className={`flex items-start ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
-        {/* Avatar for assistant - using Maotai AI logo style */}
+      <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
+        {/* Avatar for assistant - smaller on mobile */}
         {!isUser && (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 via-purple-500 to-blue-400 flex items-center justify-center mr-2 flex-shrink-0 text-white text-xs font-bold self-start">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 via-purple-500 to-blue-400 flex items-center justify-center mr-2 flex-shrink-0 text-white text-[10px] font-bold mt-0.5">
             AI
           </div>
         )}
         
-        <div className="flex flex-col max-w-[75%]">
+        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[75%]`}>
           <div
-            className={`rounded-2xl px-4 py-3 shadow-lg ${
+            className={`rounded-2xl px-3 py-2.5 ${
               isUser
-                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md'
+                ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm'
                 : isDark 
-                  ? 'bg-gray-700/80 text-gray-100 rounded-bl-md border border-gray-600/50'
-                  : 'bg-gray-100 text-gray-900 rounded-bl-md border border-gray-200'
+                  ? 'bg-gray-700/90 text-gray-100 rounded-bl-sm'
+                  : 'bg-gray-100 text-gray-900 rounded-bl-sm'
             }`}
           >
-            {/* Images */}
+            {/* Images - optimized for mobile */}
             {message.images && message.images.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {message.images.map((img) => (
                   <div key={img.id} className="relative overflow-hidden rounded-lg bg-gray-800">
                     <img
                       src={img.data}
                       alt={img.name || '图片'}
-                      className="max-w-[200px] max-h-[200px] rounded-lg object-contain cursor-pointer hover:opacity-90"
+                      className="max-w-[150px] max-h-[150px] sm:max-w-[200px] sm:max-h-[200px] rounded-lg object-contain cursor-pointer active:opacity-80"
                       style={{ display: 'block' }}
                       onClick={() => handleImageClick(img.data)}
                     />
@@ -238,8 +238,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
               </div>
             )}
             
-            {/* Message Content */}
-            <div className="message-content break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            {/* Message Content - optimized text size */}
+            <div className="message-content break-words text-[15px] leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
               {isStreaming && !message.content ? (
                 <LoadingDots />
               ) : message.content ? (
@@ -253,56 +253,58 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreami
               )}
               {/* Show cursor when streaming and has content */}
               {isStreaming && message.content && (
-                <span className="inline-block w-2 h-4 ml-0.5 bg-current animate-pulse" />
+                <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse" />
               )}
-            </div>
-            
-            {/* Timestamp */}
-            <div className={`text-xs mt-2 ${isUser ? 'text-blue-200' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {formatTime(message.timestamp)}
             </div>
           </div>
           
-          {/* Action buttons - below the message bubble */}
-          {message.content && !isStreaming && (
-            <div className={`flex items-center gap-1 mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
-              {/* Copy button */}
-              <button
-                onClick={handleCopy}
-                className={`p-1.5 ${isDark ? 'text-gray-500 hover:text-gray-300 active:text-gray-300' : 'text-gray-400 hover:text-gray-600 active:text-gray-600'} rounded transition-colors`}
-                title="复制"
-              >
-                {copied ? (
-                  <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                )}
-              </button>
-              
-              {/* Resend button - only for user messages */}
-              {isUser && onResend && (
+          {/* Timestamp and actions - outside bubble for cleaner look */}
+          <div className={`flex items-center gap-2 mt-1 px-1 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              {formatTime(message.timestamp)}
+            </span>
+            
+            {/* Action buttons */}
+            {message.content && !isStreaming && (
+              <div className="flex items-center gap-0.5">
+                {/* Copy button */}
                 <button
-                  onClick={handleResendClick}
-                  className={`p-1.5 ${isDark ? 'text-gray-500 hover:text-gray-300 active:text-gray-300' : 'text-gray-400 hover:text-gray-600 active:text-gray-600'} rounded transition-colors`}
-                  title="重新发送"
+                  onClick={handleCopy}
+                  className={`p-1 ${isDark ? 'text-gray-500 active:text-gray-300' : 'text-gray-400 active:text-gray-600'} rounded transition-colors`}
+                  title="复制"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+                  {copied ? (
+                    <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  )}
                 </button>
-              )}
-            </div>
-          )}
+                
+                {/* Resend button - only for user messages */}
+                {isUser && onResend && (
+                  <button
+                    onClick={handleResendClick}
+                    className={`p-1 ${isDark ? 'text-gray-500 active:text-gray-300' : 'text-gray-400 active:text-gray-600'} rounded transition-colors`}
+                    title="重新发送"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         
-        {/* Avatar for user */}
+        {/* Avatar for user - smaller on mobile */}
         {isUser && (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center ml-2 flex-shrink-0 self-start">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center ml-2 flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
