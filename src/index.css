@@ -300,14 +300,15 @@ button:active {
   box-shadow: 0 0 0 2px var(--color-bg-primary), 0 0 0 4px var(--color-accent);
 }
 
-/* Selection color */
+/* Selection color - default for AI messages */
 ::selection {
   background: rgba(59, 130, 246, 0.3);
 }
 
-/* User message selection - use different color for blue bubbles */
+/* User message selection - use contrasting color for blue bubbles */
+/* Dark background with white text for visibility */
 .user-message-content::selection,
 .user-message-content *::selection {
-  background: rgba(255, 255, 255, 0.4);
-  color: #1e3a5f;
+  background: rgba(0, 0, 0, 0.4);
+  color: #ffffff;
 }
