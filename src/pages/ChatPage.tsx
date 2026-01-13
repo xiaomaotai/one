@@ -17,6 +17,7 @@ import { useConfigStore } from '../store/config-store';
 import { useThemeStore } from '../store/theme-store';
 import { chatManager } from '../lib/chat';
 import { configManager } from '../lib/config';
+import { storageManager } from '../lib/storage';
 import type { Message, ImageAttachment, ImageGenerationParams } from '../types';
 import { DEFAULT_IMAGE_PARAMS } from '../types';
 
@@ -67,6 +68,27 @@ export const ChatPage: React.FC = () => {
         
         // Load sessions
         const loadedSessions = await chatManager.getAllSessions();
+        
+        // Fix any incomplete streaming messages (app was closed during streaming)
+        for (const session of loadedSessions) {
+          for (const message of session.messages) {
+            if (message.isStreaming) {
+              // Mark as failed - the streaming was interrupted
+              message.isStreaming = false;
+              // If content is empty or just a waiting message, show error
+              const content = message.content?.trim() || '';
+              if (!content || content === '正在生成图片，请稍候...' || content.startsWith('正在生成')) {
+                message.content = '[已中断] 生成被中断，请重新发送';
+              } else if (!content.includes('![') && !content.includes('[错误]') && !content.includes('❌')) {
+                // Has some content but was interrupted
+                message.content = content + '\n\n[已中断]';
+              }
+              // Save the fixed message
+              await storageManager.saveMessage(message);
+            }
+          }
+        }
+        
         setSessions(loadedSessions);
         
         // Set current session if there's one
