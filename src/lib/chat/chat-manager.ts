@@ -13,7 +13,8 @@ import type {
   ModelConfig,
   CreateSessionInput,
   SessionPreview,
-  ImageAttachment
+  ImageAttachment,
+  ImageGenerationParams
 } from '../../types';
 import { storageManager } from '../storage';
 import { configManager } from '../config';
@@ -36,6 +37,9 @@ export interface ChatManagerCallbacks {
   onStreamEnd?: (sessionId: string, messageId: string, fullContent: string) => void;
   onStreamError?: (sessionId: string, messageId: string, error: string) => void;
 }
+
+// Special marker to indicate content replacement (used by image generation)
+const REPLACE_CONTENT_MARKER = '__REPLACE_CONTENT__';
 
 export class ChatManager {
   private callbacks: ChatManagerCallbacks = {};
@@ -160,7 +164,12 @@ export class ChatManager {
   /**
    * Send a message and get streaming response
    */
-  async sendMessage(sessionId: string, content: string, images?: ImageAttachment[]): Promise<Message> {
+  async sendMessage(
+    sessionId: string, 
+    content: string, 
+    images?: ImageAttachment[],
+    imageParams?: ImageGenerationParams
+  ): Promise<Message> {
     // Load session
     const session = await storageManager.loadSession(sessionId);
     if (!session) {
@@ -198,7 +207,7 @@ export class ChatManager {
     await storageManager.saveMessage(assistantMessage);
 
     // Start streaming response
-    this.streamResponse(sessionId, assistantMessage.id, config, session.messages.concat(userMessage));
+    this.streamResponse(sessionId, assistantMessage.id, config, session.messages.concat(userMessage), imageParams);
 
     return userMessage;
   }
@@ -210,13 +219,16 @@ export class ChatManager {
     sessionId: string,
     messageId: string,
     config: ModelConfig,
-    history: Message[]
+    history: Message[],
+    imageParams?: ImageGenerationParams
   ): Promise<void> {
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
 
-    // 60秒超时
-    const TIMEOUT_MS = 60000;
+    // 根据模型类型设置不同的超时时间
+    // 文生图模式需要更长的超时时间（5分钟），普通对话60秒
+    const isImageGeneration = config.provider === 'image-generation';
+    const TIMEOUT_MS = isImageGeneration ? 300000 : 60000; // 5分钟 vs 1分钟
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let lastChunkTime = Date.now();
 
@@ -234,13 +246,21 @@ export class ChatManager {
       const checkTimeout = () => {
         if (Date.now() - lastChunkTime > TIMEOUT_MS) {
           abortController.abort();
-          this.callbacks.onStreamError?.(sessionId, messageId, '响应超时（60秒无响应）');
+          const timeoutMsg = isImageGeneration 
+            ? '图片生成超时（5分钟无响应），请重试'
+            : '响应超时（60秒无响应）';
+          this.callbacks.onStreamError?.(sessionId, messageId, timeoutMsg);
         }
       };
       timeoutId = setInterval(checkTimeout, 1000);
       
-      // Stream response
-      for await (const chunk of adapter.sendMessage(lastUserMessage.content, history.slice(0, -1), lastUserMessage.images)) {
+      // Stream response - pass imageParams for image generation
+      for await (const chunk of adapter.sendMessage(
+        lastUserMessage.content, 
+        history.slice(0, -1), 
+        lastUserMessage.images,
+        imageParams
+      )) {
         // Check if aborted
         if (abortController.signal.aborted) {
           break;
@@ -248,7 +268,15 @@ export class ChatManager {
 
         // 更新最后收到数据的时间
         lastChunkTime = Date.now();
-        fullContent += chunk;
+        
+        // Check for content replacement marker (used by image generation)
+        if (chunk.startsWith(REPLACE_CONTENT_MARKER)) {
+          // Replace all previous content with new content
+          fullContent = chunk.substring(REPLACE_CONTENT_MARKER.length);
+        } else {
+          // Normal append
+          fullContent += chunk;
+        }
         
         // Notify chunk received
         this.callbacks.onStreamChunk?.(sessionId, messageId, chunk, fullContent);
@@ -313,7 +341,11 @@ export class ChatManager {
       else if (lowerError.includes('timeout') || 
                lowerError.includes('超时') ||
                lowerError.includes('timed out')) {
-        friendlyMessage = '连接超时，请检查：\n1. API Key 是否正确\n2. API 地址是否可访问\n3. 网络连接是否正常';
+        if (isImageGeneration) {
+          friendlyMessage = '图片生成超时，请检查：\n1. API Token 是否正确\n2. 网络连接是否正常\n3. 稍后重试';
+        } else {
+          friendlyMessage = '连接超时，请检查：\n1. API Key 是否正确\n2. API 地址是否可访问\n3. 网络连接是否正常';
+        }
       }
       // 请求过多
       else if (lowerError.includes('429') || 
@@ -333,6 +365,12 @@ export class ChatManager {
                lowerError.includes('quota') ||
                lowerError.includes('balance')) {
         friendlyMessage = 'API 额度不足，请检查账户余额';
+      }
+      // 图片生成失败 - 保留原始错误信息
+      else if (lowerError.includes('图像生成') || 
+               lowerError.includes('图片生成') ||
+               lowerError.includes('image generation')) {
+        friendlyMessage = errorMessage;
       }
       
       // Update message with error

@@ -5,31 +5,51 @@
  * Mobile-optimized with hamburger menu on left, model selector on right.
  * Supports light/dark theme.
  * Handles safe area insets for notch devices and navigation bars.
+ * Each session remembers its own model configuration.
  * 
  * Requirements: 8.1, 8.2
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Sidebar } from './Sidebar';
-import { useConfigStore, getDefaultConfig } from '../../store/config-store';
+import { useConfigStore } from '../../store/config-store';
+import { useChatStore, getCurrentSession } from '../../store/chat-store';
 import { useThemeStore } from '../../store/theme-store';
+import { useSidebarStore } from '../../store/sidebar-store';
+import { chatManager } from '../../lib/chat';
 
 // Check if running on native platform
 const isNative = Capacitor.isNativePlatform();
 
+// Declare the ThemeInterface for TypeScript
+declare global {
+  interface Window {
+    ThemeInterface?: {
+      setDarkTheme: (isDark: boolean) => void;
+    };
+  }
+}
+
 export const MainLayout: React.FC = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const { isOpen: sidebarOpen, setOpen: setSidebarOpen, close: closeSidebar, toggle: toggleSidebar } = useSidebarStore();
+  const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false);
   const location = useLocation();
   
-  const { configs, setDefault } = useConfigStore();
-  const defaultConfig = useConfigStore(getDefaultConfig);
+  const { configs } = useConfigStore();
+  const { updateSession } = useChatStore();
+  const currentSession = useChatStore(getCurrentSession);
   const { theme, toggleTheme } = useThemeStore();
   
   const isSettingsPage = location.pathname === '/settings';
   const isDark = theme === 'dark';
+
+  // Get the config for current session
+  const sessionConfig = useMemo(() => {
+    if (!currentSession) return undefined;
+    return configs.find(c => c.id === currentSession.configId);
+  }, [currentSession, configs]);
 
   // 记录是否从抽屉进入设置页（通过 location.state 判断）
   const enteredFromDrawer = useRef(false);
@@ -43,22 +63,21 @@ export const MainLayout: React.FC = () => {
       setSidebarOpen(true);
       enteredFromDrawer.current = false;
     }
-  }, [isSettingsPage, location.state]);
+  }, [isSettingsPage, location.state, setSidebarOpen]);
 
   // Handle status bar style based on theme and sidebar state
   useEffect(() => {
     if (isNative) {
       const updateStatusBar = async () => {
         try {
-          // Style.Light = 浅色文字/图标（用于深色背景）
-          // Style.Dark = 深色文字/图标（用于浅色背景）
-          // 深色模式：深色背景 -> 需要浅色文字 -> Style.Light
-          // 浅色模式：浅色背景 -> 需要深色文字 -> Style.Dark
+          // For Huawei/HarmonyOS devices, the status bar background is always white
+          // So we always use Style.Light which gives dark/black icons on these devices
+          // This ensures icons are visible on the white background
           await StatusBar.setStyle({
-            style: isDark ? Style.Light : Style.Dark
+            style: Style.Light
           });
           
-          // Set status bar background color
+          // Try to set status bar background color (may be ignored by Huawei/HarmonyOS)
           await StatusBar.setBackgroundColor({
             color: isDark ? '#111827' : '#ffffff'
           });
@@ -66,6 +85,15 @@ export const MainLayout: React.FC = () => {
           console.log('StatusBar update failed:', error);
         }
       };
+      
+      // Also update native Android system bars via JavaScript interface
+      if (Capacitor.getPlatform() === 'android' && window.ThemeInterface) {
+        try {
+          window.ThemeInterface.setDarkTheme(isDark);
+        } catch (error) {
+          console.error('ThemeInterface update failed:', error);
+        }
+      }
       
       updateStatusBar();
     }
@@ -77,11 +105,17 @@ export const MainLayout: React.FC = () => {
     }
   }, [isDark, sidebarOpen]);
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const closeSidebar = () => setSidebarOpen(false);
-
   const handleSelectModel = async (configId: string) => {
-    setDefault(configId);
+    // Update current session's configId
+    if (currentSession) {
+      try {
+        await chatManager.switchSessionConfig(currentSession.id, configId);
+        // Update local state
+        updateSession(currentSession.id, { configId });
+      } catch (error) {
+        console.error('切换模型失败:', error);
+      }
+    }
     setModelDropdownOpen(false);
   };
 
@@ -103,15 +137,15 @@ export const MainLayout: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Model selector - only show on chat page */}
-          {!isSettingsPage && configs.length > 0 && (
+          {/* Model selector - only show on chat page when there's a session */}
+          {!isSettingsPage && configs.length > 0 && currentSession && (
             <div className="relative">
               <button
                 onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
                 className={`flex items-center gap-2 px-3 py-1.5 text-sm ${isDark ? 'text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200'} rounded-lg transition-colors`}
               >
                 <span className="max-w-[120px] truncate">
-                  {defaultConfig?.name || '选择模型'}
+                  {sessionConfig?.name || '选择模型'}
                 </span>
                 <svg className={`w-4 h-4 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -131,21 +165,21 @@ export const MainLayout: React.FC = () => {
                         key={config.id}
                         onClick={() => handleSelectModel(config.id)}
                         className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between gap-3 ${
-                          config.isDefault 
+                          config.id === currentSession?.configId 
                             ? isDark ? 'bg-gray-700' : 'bg-blue-50'
                             : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
                         }`}
                       >
                         <div className="flex-1 min-w-0 mr-2">
-                          <div className={`truncate ${config.isDefault ? (isDark ? 'text-white' : 'text-blue-700') : ''}`}>{config.name}</div>
-                          <div className={`text-xs truncate ${config.isDefault ? (isDark ? 'text-gray-400' : 'text-blue-500') : 'opacity-70'}`}>{config.modelName}</div>
+                          <div className={`truncate ${config.id === currentSession?.configId ? (isDark ? 'text-white' : 'text-blue-700') : ''}`}>{config.name}</div>
+                          <div className={`text-xs truncate ${config.id === currentSession?.configId ? (isDark ? 'text-gray-400' : 'text-blue-500') : 'opacity-70'}`}>{config.modelName}</div>
                         </div>
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          config.isDefault 
+                          config.id === currentSession?.configId 
                             ? 'border-blue-500 bg-blue-500' 
                             : isDark ? 'border-gray-500' : 'border-gray-300'
                         }`}>
-                          {config.isDefault && (
+                          {config.id === currentSession?.configId && (
                             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>

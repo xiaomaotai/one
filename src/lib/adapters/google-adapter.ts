@@ -8,7 +8,7 @@
  * Requirements: 6.3
  */
 
-import type { AIAdapter, Message, ImageAttachment } from '../../types';
+import type { AIAdapter, Message, ImageAttachment, ImageGenerationParams } from '../../types';
 import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 interface GeminiPart {
@@ -100,7 +100,12 @@ export class GoogleAdapter implements AIAdapter {
   /**
    * Send a message and stream the response
    */
-  async *sendMessage(message: string, history: Message[], images?: ImageAttachment[]): AsyncGenerator<string, void, unknown> {
+  async *sendMessage(
+    message: string, 
+    history: Message[], 
+    images?: ImageAttachment[],
+    _imageParams?: ImageGenerationParams  // Not used for chat models
+  ): AsyncGenerator<string, void, unknown> {
     const contents = this.formatMessages(message, history, images);
     
     const url = `${this.apiUrl}/models/${this.modelName}:streamGenerateContent?key=${this.apiKey}&alt=sse`;

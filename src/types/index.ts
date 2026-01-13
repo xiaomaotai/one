@@ -3,14 +3,15 @@
 // ============================================
 
 /** Supported AI provider types */
-export type AIProvider = 'openai' | 'anthropic' | 'google' | 'openai-compatible';
+export type AIProvider = 'openai' | 'anthropic' | 'google' | 'openai-compatible' | 'image-generation';
 
 /** Provider display names for UI */
 export const PROVIDER_NAMES: Record<AIProvider, string> = {
   'openai': 'OpenAI (ChatGPT)',
   'anthropic': 'Anthropic (Claude)',
   'google': 'Google (Gemini)',
-  'openai-compatible': 'OpenAI 兼容'
+  'openai-compatible': 'OpenAI 兼容',
+  'image-generation': '文生图 (通用)'
 };
 
 /** Default API URLs for each provider */
@@ -18,7 +19,41 @@ export const DEFAULT_API_URLS: Record<AIProvider, string> = {
   'openai': 'https://api.openai.com/v1',
   'anthropic': 'https://api.anthropic.com',
   'google': 'https://generativelanguage.googleapis.com/v1beta',
-  'openai-compatible': ''
+  'openai-compatible': '',
+  'image-generation': ''
+};
+
+// ============================================
+// Image Generation Parameters
+// ============================================
+
+/** Image generation parameters */
+export interface ImageGenerationParams {
+  /** Image size/resolution */
+  size?: '512x512' | '768x768' | '1024x1024' | '1024x768' | '768x1024';
+  /** Number of images to generate */
+  n?: number;
+  /** Negative prompt (what to avoid) */
+  negativePrompt?: string;
+  /** Guidance scale / CFG scale */
+  guidanceScale?: number;
+  /** Number of inference steps */
+  steps?: number;
+  /** Random seed for reproducibility */
+  seed?: number;
+  /** Style preset */
+  style?: string;
+}
+
+/** Default image generation parameters */
+export const DEFAULT_IMAGE_PARAMS: ImageGenerationParams = {
+  size: '1024x1024',
+  n: 1,
+  negativePrompt: '',
+  guidanceScale: 7.5,
+  steps: 30,
+  seed: undefined,
+  style: ''
 };
 
 // ============================================
@@ -31,9 +66,10 @@ export type MessageRole = 'user' | 'assistant';
 /** Image attachment for messages */
 export interface ImageAttachment {
   id: string;
-  data: string;  // base64 data URL
+  data: string;  // base64 data URL or remote URL
   mimeType: string;
   name?: string;
+  isGenerated?: boolean;  // Flag for AI-generated images
 }
 
 /** Message interface */
@@ -132,8 +168,13 @@ export interface SessionPreview {
 
 /** API adapter interface */
 export interface AIAdapter {
-  sendMessage(message: string, history: Message[], images?: ImageAttachment[]): AsyncGenerator<string, void, unknown>;
+  sendMessage(message: string, history: Message[], images?: ImageAttachment[], imageParams?: ImageGenerationParams): AsyncGenerator<string, void, unknown>;
   validateCredentials(): Promise<boolean>;
+}
+
+/** Image generation adapter interface */
+export interface ImageGenerationAdapter extends AIAdapter {
+  generateImage(prompt: string, params?: ImageGenerationParams): Promise<string>;  // Returns image URL
 }
 
 /** Stream chunk from API */
@@ -223,6 +264,10 @@ export const ErrorCode = {
   
   // Session errors
   SESSION_NOT_FOUND: 'SESSION_NOT_FOUND',
+  
+  // Image generation errors
+  IMAGE_GENERATION_FAILED: 'IMAGE_GENERATION_FAILED',
+  IMAGE_GENERATION_TIMEOUT: 'IMAGE_GENERATION_TIMEOUT',
   
   // General errors
   UNKNOWN_ERROR: 'UNKNOWN_ERROR'

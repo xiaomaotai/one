@@ -2,7 +2,8 @@
  * Adapter Factory
  * 
  * Creates appropriate API adapter based on provider type.
- * Supports OpenAI, Anthropic, Google Gemini, and OpenAI-compatible APIs.
+ * Supports OpenAI, Anthropic, Google Gemini, OpenAI-compatible APIs,
+ * and generic image generation.
  * 
  * Requirements: 6.1, 6.2, 6.3, 6.4, 1.5
  */
@@ -11,6 +12,7 @@ import type { AIAdapter, ModelConfig } from '../../types';
 import { OpenAIAdapter } from './openai-adapter';
 import { AnthropicAdapter } from './anthropic-adapter';
 import { GoogleAdapter } from './google-adapter';
+import { ImageGenerationAdapter } from './image-generation-adapter';
 
 /**
  * Create an API adapter based on the model configuration
@@ -46,6 +48,13 @@ export function createAdapter(config: ModelConfig): AIAdapter {
         config.apiUrl || 'https://generativelanguage.googleapis.com/v1beta'
       );
     
+    case 'image-generation':
+      return new ImageGenerationAdapter(
+        config.apiKey,
+        config.apiUrl,
+        config.modelName
+      );
+    
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
@@ -63,6 +72,8 @@ export function getDefaultApiUrl(provider: ModelConfig['provider']): string {
     case 'google':
       return 'https://generativelanguage.googleapis.com/v1beta';
     case 'openai-compatible':
+      return '';
+    case 'image-generation':
       return '';
     default:
       return '';
@@ -82,7 +93,16 @@ export function getSuggestedModels(provider: ModelConfig['provider']): string[] 
       return ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
     case 'openai-compatible':
       return [];
+    case 'image-generation':
+      return [];
     default:
       return [];
   }
+}
+
+/**
+ * Check if a provider is an image generation provider
+ */
+export function isImageGenerationProvider(provider: ModelConfig['provider']): boolean {
+  return provider === 'image-generation';
 }

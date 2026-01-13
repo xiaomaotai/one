@@ -1,4 +1,4 @@
-@import "tailwindcss";
+ @import "tailwindcss";
 
 /* CSS Variables for theming - Dark theme (default) */
 :root {
@@ -18,6 +18,12 @@
   --color-input: #374151;
   --color-scrollbar: #4b5563;
   --color-scrollbar-hover: #6b7280;
+  
+  /* Safe area insets - fallback values for devices that don't support env() */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
 /* Light theme */
@@ -215,6 +221,16 @@ button:active {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease;
+}
+
+/* Fade out animation */
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.2s ease;
 }
 
 /* Slide in from left */

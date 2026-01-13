@@ -3,15 +3,17 @@
  * 
  * Manages AI model configurations with CRUD operations.
  * Supports light/dark theme.
+ * Preserves scroll position when app is backgrounded/resumed.
  * 
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConfigStore } from '../store/config-store';
 import { useThemeStore } from '../store/theme-store';
 import { configManager } from '../lib/config';
 import { ConfigForm } from '../components/settings';
+import { useScrollRestore } from '../lib/utils/use-scroll-restore';
 import type { ModelConfig, CreateConfigInput } from '../types';
 import { PROVIDER_NAMES } from '../types';
 
@@ -49,6 +51,11 @@ const DeleteModal: React.FC<{
   </div>
 );
 
+// Check if provider is image generation type
+const isImageProvider = (provider: string): boolean => {
+  return provider === 'image-generation';
+};
+
 export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -58,6 +65,14 @@ export const SettingsPage: React.FC = () => {
   const [deleteConfig, setDeleteConfigState] = useState<ModelConfig | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+
+  // Scroll container refs for different views
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const formContainerRef = useRef<HTMLDivElement>(null);
+
+  // Use scroll restore hook for both containers
+  useScrollRestore(listContainerRef);
+  useScrollRestore(formContainerRef);
 
   const { configs, setConfigs, addConfig, updateConfig, deleteConfig: removeConfig, setDefault } = useConfigStore();
   const theme = useThemeStore((state) => state.theme);
@@ -219,7 +234,7 @@ export const SettingsPage: React.FC = () => {
             {viewMode === 'create' ? '添加配置' : '编辑配置'}
           </h2>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={formContainerRef} className="flex-1 overflow-y-auto p-4">
           <div className="max-w-lg">
             <ConfigForm
               config={editingConfig ?? undefined}
@@ -263,7 +278,7 @@ export const SettingsPage: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={listContainerRef} className="flex-1 overflow-y-auto p-4">
         {configs.length === 0 ? (
           <div className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-500'} py-12`}>
             <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,17 +293,20 @@ export const SettingsPage: React.FC = () => {
             {configs.map((config) => (
               <div
                 key={config.id}
-                className={`p-4 rounded-lg ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border`}
+                className={`p-4 rounded-lg ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border overflow-hidden`}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{config.name}</h3>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{config.name}</h3>
                       {config.isDefault && (
-                        <span className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">默认</span>
+                        <span className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded flex-shrink-0">默认</span>
+                      )}
+                      {isImageProvider(config.provider) && (
+                        <span className="px-2 py-0.5 text-xs bg-purple-600 text-white rounded flex-shrink-0">🎨 文生图</span>
                       )}
                     </div>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1 truncate`}>
                       {PROVIDER_NAMES[config.provider]} · {config.modelName}
                     </p>
                     <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1 truncate`}>
@@ -303,7 +321,7 @@ export const SettingsPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     {/* Test button */}
                     <button
                       onClick={() => handleTest(config)}
@@ -348,15 +366,15 @@ export const SettingsPage: React.FC = () => {
                     </button>
 
                     {/* Delete button */}
-                      <button
-                        onClick={() => setDeleteConfigState(config)}
-                        className={`p-2 ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-500 hover:text-red-500'} transition-colors`}
-                        title="删除"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                    <button
+                      onClick={() => setDeleteConfigState(config)}
+                      className={`p-2 ${isDark ? 'text-gray-400 hover:text-red-400' : 'text-gray-500 hover:text-red-500'} transition-colors`}
+                      title="删除"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>

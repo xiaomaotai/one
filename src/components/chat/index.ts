@@ -1,3 +1,10 @@
+/**
+ * Chat Components Module
+ * 
+ * Exports all chat-related components.
+ */
+
 export { MessageBubble } from './MessageBubble';
-export { MessageList } from './MessageList';
 export { MessageInput } from './MessageInput';
+export { MessageList } from './MessageList';
+export { ImageParamsPanel } from './ImageParamsPanel';

@@ -6,10 +6,11 @@
  * Supports session deletion with confirmation.
  * Works as a drawer on mobile.
  * Supports light/dark theme.
+ * Sessions are sorted by updatedAt in descending order (newest first).
  * 
  * Requirements: 8.1, 8.2
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../store/chat-store';
 import { useConfigStore, getDefaultConfig } from '../../store/config-store';
@@ -40,6 +41,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const defaultConfig = useConfigStore(getDefaultConfig);
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
+
+  // Sort sessions by updatedAt in descending order (newest first)
+  const sortedSessions = useMemo(() => {
+    return [...sessions].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [sessions]);
 
   // Check if any session is being edited or deleted
   const isAnyOperationInProgress = editingSessionId !== null || deleteConfirmId !== null;
@@ -82,8 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   // Create new chat
   const handleNewChat = async () => {
-    // Check if the latest session (first in list) is empty
-    const latestSession = sessions.length > 0 ? sessions[0] : null;
+    // Check if the latest session (first in sorted list) is empty
+    const latestSession = sortedSessions.length > 0 ? sortedSessions[0] : null;
     if (latestSession && latestSession.messages.length === 0) {
       // Switch to the empty session instead of creating a new one
       setCurrentSession(latestSession.id);
@@ -233,11 +239,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           <h2 className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider mb-2`}>
             历史对话
           </h2>
-          {sessions.length === 0 ? (
+          {sortedSessions.length === 0 ? (
             <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'} px-2`}>暂无对话记录</p>
           ) : (
             <ul className="space-y-1">
-              {sessions.map((session) => (
+              {sortedSessions.map((session) => (
                 <li key={session.id}>
                   <div
                     onClick={() => handleSelectSession(session.id)}

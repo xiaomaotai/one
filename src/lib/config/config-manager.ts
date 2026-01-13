@@ -162,15 +162,15 @@ export class ConfigurationManager {
     }
 
     // Validate provider
-    const validProviders: AIProvider[] = ['openai', 'anthropic', 'google', 'openai-compatible'];
+    const validProviders: AIProvider[] = ['openai', 'anthropic', 'google', 'openai-compatible', 'image-generation'];
     if (!validProviders.includes(input.provider)) {
       errors.push({ field: 'provider', message: '无效的提供商类型' });
     }
 
     // Validate API URL
-    if (input.provider === 'openai-compatible') {
+    if (input.provider === 'openai-compatible' || input.provider === 'image-generation') {
       if (!input.apiUrl || input.apiUrl.trim().length === 0) {
-        errors.push({ field: 'apiUrl', message: 'OpenAI兼容模式需要提供API URL' });
+        errors.push({ field: 'apiUrl', message: '此模式需要提供API URL' });
       }
     }
 
@@ -224,6 +224,13 @@ export class ConfigurationManager {
    */
   getDefaultApiUrl(provider: AIProvider): string {
     return getDefaultApiUrl(provider);
+  }
+
+  /**
+   * Check if a provider is an image generation provider
+   */
+  isImageGenerationProvider(provider: AIProvider): boolean {
+    return provider === 'image-generation';
   }
 }
 
