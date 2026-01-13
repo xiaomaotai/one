@@ -2,11 +2,12 @@
  * Header Component
  * 
  * Application header with model indicator and model selector.
+ * Shows the current session's model configuration.
  * 
  * Requirements: 8.1, 8.2
  */
-import React, { useState } from 'react';
-import { useConfigStore, getCurrentConfig } from '../../store/config-store';
+import React, { useState, useMemo } from 'react';
+import { useConfigStore } from '../../store/config-store';
 import { useChatStore, getCurrentSession } from '../../store/chat-store';
 import { chatManager } from '../../lib/chat';
 import { PROVIDER_NAMES } from '../../types';
@@ -18,13 +19,16 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = () => {
   const [showSelector, setShowSelector] = useState(false);
   const configs = useConfigStore((state) => state.configs);
-  const currentConfig = useConfigStore(getCurrentConfig);
-  const setCurrentConfig = useConfigStore((state) => state.setCurrentConfig);
   const currentSession = useChatStore(getCurrentSession);
   const updateSession = useChatStore((state) => state.updateSession);
 
+  // Get the config for current session (not global currentConfigId)
+  const sessionConfig = useMemo(() => {
+    if (!currentSession) return undefined;
+    return configs.find((c) => c.id === currentSession.configId);
+  }, [currentSession, configs]);
+
   const handleSelectConfig = async (configId: string) => {
-    setCurrentConfig(configId);
     setShowSelector(false);
     
     // Update current session's config if there is one
@@ -53,10 +57,10 @@ export const Header: React.FC<HeaderProps> = () => {
           onClick={() => setShowSelector(!showSelector)}
           className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors max-w-[200px]"
         >
-          {currentConfig ? (
+          {sessionConfig ? (
             <>
               <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
-              <span className="text-sm text-white truncate max-w-[120px]">{currentConfig.name}</span>
+              <span className="text-sm text-white truncate max-w-[120px]">{sessionConfig.name}</span>
               <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -94,7 +98,7 @@ export const Header: React.FC<HeaderProps> = () => {
                         <button
                           onClick={() => handleSelectConfig(config.id)}
                           className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                            currentConfig?.id === config.id
+                            sessionConfig?.id === config.id
                               ? 'bg-blue-600 text-white'
                               : 'text-gray-300 hover:bg-gray-700'
                           }`}
