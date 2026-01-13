@@ -25,6 +25,10 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: 'body',
       resizeOnFullScreen: true
+    },
+    // Enable native HTTP to bypass CORS
+    CapacitorHttp: {
+      enabled: true
     }
   }
 };

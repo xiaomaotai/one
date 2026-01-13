@@ -4,23 +4,28 @@
  * Main chat interface with message display and input.
  * Handles message sending and streaming responses.
  * Supports light/dark theme.
+ * Supports image generation parameters for text-to-image models.
+ * Each session uses its own model configuration.
  * 
  * Requirements: 2.1, 2.2, 2.4
  */
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageList, MessageInput } from '../components/chat';
+import { MessageList, MessageInput, ImageParamsPanel } from '../components/chat';
 import { useChatStore, getCurrentSession } from '../store/chat-store';
-import { useConfigStore, getCurrentConfig } from '../store/config-store';
+import { useConfigStore } from '../store/config-store';
 import { useThemeStore } from '../store/theme-store';
 import { chatManager } from '../lib/chat';
 import { configManager } from '../lib/config';
-import type { Message, ImageAttachment } from '../types';
+import { storageManager } from '../lib/storage';
+import type { Message, ImageAttachment, ImageGenerationParams } from '../types';
+import { DEFAULT_IMAGE_PARAMS } from '../types';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [imageParams, setImageParams] = useState<ImageGenerationParams>({ ...DEFAULT_IMAGE_PARAMS });
   
   // Store state
   const {
@@ -36,8 +41,20 @@ export const ChatPage: React.FC = () => {
   } = useChatStore();
   
   const currentSession = useChatStore(getCurrentSession);
-  const { configs, setConfigs, setCurrentConfig, currentConfigId } = useConfigStore();
-  const currentConfig = useConfigStore(getCurrentConfig);
+  const configs = useConfigStore((state) => state.configs);
+  const setConfigs = useConfigStore((state) => state.setConfigs);
+  
+  // Get the config for current session (each session has its own model)
+  const sessionConfig = useMemo(() => {
+    if (!currentSession) return undefined;
+    return configs.find((c) => c.id === currentSession.configId);
+  }, [currentSession, configs]);
+
+  // Check if current session's config is image generation
+  const isImageGenerationMode = useMemo(() => {
+    return sessionConfig?.provider === 'image-generation';
+  }, [sessionConfig]);
+  
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
 
@@ -49,16 +66,29 @@ export const ChatPage: React.FC = () => {
         const loadedConfigs = await configManager.getAllConfigs();
         setConfigs(loadedConfigs);
         
-        // Set current config to default
-        const defaultCfg = loadedConfigs.find(c => c.isDefault);
-        if (defaultCfg) {
-          setCurrentConfig(defaultCfg.id);
-        } else if (loadedConfigs.length > 0) {
-          setCurrentConfig(loadedConfigs[0].id);
-        }
-        
         // Load sessions
         const loadedSessions = await chatManager.getAllSessions();
+        
+        // Fix any incomplete streaming messages (app was closed during streaming)
+        for (const session of loadedSessions) {
+          for (const message of session.messages) {
+            if (message.isStreaming) {
+              // Mark as failed - the streaming was interrupted
+              message.isStreaming = false;
+              // If content is empty or just a waiting message, show error
+              const content = message.content?.trim() || '';
+              if (!content || content === '正在生成图片，请稍候...' || content.startsWith('正在生成')) {
+                message.content = '[已中断] 生成被中断，请重新发送';
+              } else if (!content.includes('![') && !content.includes('[错误]') && !content.includes('❌')) {
+                // Has some content but was interrupted
+                message.content = content + '\n\n[已中断]';
+              }
+              // Save the fixed message
+              await storageManager.saveMessage(message);
+            }
+          }
+        }
+        
         setSessions(loadedSessions);
         
         // Set current session if there's one
@@ -71,7 +101,7 @@ export const ChatPage: React.FC = () => {
     };
     
     initData();
-  }, [setConfigs, setCurrentConfig, setSessions, setCurrentSession, currentSessionId]);
+  }, [setConfigs, setSessions, setCurrentSession, currentSessionId]);
 
   // Reload configs when navigating back to this page (to sync config changes from settings)
   useEffect(() => {
@@ -79,18 +109,6 @@ export const ChatPage: React.FC = () => {
       try {
         const loadedConfigs = await configManager.getAllConfigs();
         setConfigs(loadedConfigs);
-        
-        // If current config was deleted, switch to default
-        if (currentConfigId && !loadedConfigs.find(c => c.id === currentConfigId)) {
-          const defaultCfg = loadedConfigs.find(c => c.isDefault);
-          if (defaultCfg) {
-            setCurrentConfig(defaultCfg.id);
-          } else if (loadedConfigs.length > 0) {
-            setCurrentConfig(loadedConfigs[0].id);
-          } else {
-            setCurrentConfig(null);
-          }
-        }
       } catch (error) {
         console.error('重新加载配置失败:', error);
       }
@@ -100,7 +118,7 @@ export const ChatPage: React.FC = () => {
     if (location.pathname === '/') {
       reloadConfigs();
     }
-  }, [location.pathname, setConfigs, setCurrentConfig, currentConfigId]);
+  }, [location.pathname, setConfigs]);
 
   // Set up chat manager callbacks
   useEffect(() => {
@@ -145,8 +163,8 @@ export const ChatPage: React.FC = () => {
 
   // Handle sending message
   const handleSendMessage = useCallback(async (content: string, images?: ImageAttachment[]) => {
-    // Check if we have a config
-    if (!currentConfig && configs.length === 0) {
+    // Check if we have any config
+    if (configs.length === 0) {
       navigate('/settings');
       return;
     }
@@ -155,22 +173,33 @@ export const ChatPage: React.FC = () => {
       // Create session if needed
       let sessionId = currentSessionId;
       if (!sessionId) {
+        // Create new session with default config
         const session = await chatManager.createSession();
         addSession(session);
         setCurrentSession(session.id);
         sessionId = session.id;
       }
 
-      // Send message with images
-      const userMessage = await chatManager.sendMessage(sessionId, content, images);
+      // Get the session's config to check if it's image generation mode
+      const session = await chatManager.getSession(sessionId);
+      const config = session ? configs.find(c => c.id === session.configId) : undefined;
+      const isImageMode = config?.provider === 'image-generation';
+
+      // Send message with images and image params (for image generation mode)
+      const userMessage = await chatManager.sendMessage(
+        sessionId, 
+        content, 
+        images,
+        isImageMode ? imageParams : undefined
+      );
       
       // Add user message to store
       addMessage(sessionId, userMessage);
       
       // Add placeholder for assistant message
-      const session = await chatManager.getSession(sessionId);
-      if (session) {
-        const assistantMessage = session.messages[session.messages.length - 1];
+      const updatedSession = await chatManager.getSession(sessionId);
+      if (updatedSession) {
+        const assistantMessage = updatedSession.messages[updatedSession.messages.length - 1];
         if (assistantMessage && assistantMessage.role === 'assistant') {
           addMessage(sessionId, assistantMessage);
         }
@@ -178,7 +207,7 @@ export const ChatPage: React.FC = () => {
     } catch (error) {
       console.error('发送消息失败:', error);
     }
-  }, [currentSessionId, currentConfig, configs, navigate, addSession, setCurrentSession, addMessage]);
+  }, [currentSessionId, configs, navigate, addSession, setCurrentSession, addMessage, imageParams]);
 
   // Handle resend message
   const handleResendMessage = useCallback(async (messageId: string) => {
@@ -221,6 +250,15 @@ export const ChatPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+      {/* Image generation parameters panel - only show for image-generation provider */}
+      {isImageGenerationMode && (
+        <ImageParamsPanel
+          params={imageParams}
+          onChange={setImageParams}
+          collapsed={true}
+        />
+      )}
+      
       <MessageList 
         messages={messages} 
         streamingMessageId={streamingMessageId ?? undefined}
@@ -229,9 +267,16 @@ export const ChatPage: React.FC = () => {
       <MessageInput 
         onSend={handleSendMessage} 
         disabled={isStreaming}
-        placeholder={currentConfig ? `使用 ${currentConfig.name} 发送消息...` : '选择一个模型开始聊天'}
+        placeholder={
+          isImageGenerationMode 
+            ? '描述你想生成的图片...'
+            : sessionConfig 
+              ? '输入消息...' 
+              : '选择模型开始聊天'
+        }
         isStreaming={isStreaming}
         onStop={handleStopStreaming}
+        hideImageUpload={isImageGenerationMode}
       />
     </div>
   );

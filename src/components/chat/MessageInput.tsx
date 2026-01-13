@@ -3,6 +3,7 @@
  * 
  * Text input field with send button for composing messages.
  * Supports image upload for multimodal AI models.
+ * Hides image upload for text-to-image models.
  * Supports light/dark theme.
  * Handles photo library permissions on native platforms.
  * 
@@ -20,6 +21,7 @@ interface MessageInputProps {
   placeholder?: string;
   isStreaming?: boolean;
   onStop?: () => void;
+  hideImageUpload?: boolean;  // Hide image upload for text-to-image models
 }
 
 // Check if running in native app - use multiple detection methods
@@ -95,7 +97,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   disabled = false,
   placeholder = '输入消息...',
   isStreaming = false,
-  onStop
+  onStop,
+  hideImageUpload = false
 }) => {
   const [content, setContent] = useState('');
   const [images, setImages] = useState<ImageAttachment[]>([]);
@@ -106,12 +109,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
 
-  // Auto-resize textarea
+  // Auto-resize textarea based on content, but only when there's actual content
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      // Reset to minimum height first
+      textarea.style.height = '36px';
+      // Only expand if there's content
+      if (content.trim()) {
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      }
     }
   }, [content]);
 
@@ -125,7 +132,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setContent('');
       setImages([]);
       if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = '36px';
       }
     }
   };
@@ -236,6 +243,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setPreviewImage(imageData);
   };
 
+  // Show image upload button only if not hidden
+  const showImageUpload = !hideImageUpload;
+
   return (
     <div className={`border-t ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'} p-4`}>
       <div className="max-w-3xl mx-auto">
@@ -262,25 +272,29 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         )}
         
         <div className={`flex items-end gap-3 ${isDark ? 'bg-gray-700' : 'bg-white border border-gray-200'} rounded-xl p-2`}>
-          {/* Image Upload Button */}
-          <button
-            onClick={handleImageClick}
-            disabled={disabled || images.length >= 4}
-            className={`p-2 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-            title="上传图片（最多4张）"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileChange}
-            className="hidden"
-          />
+          {/* Image Upload Button - only show if not hidden */}
+          {showImageUpload && (
+            <>
+              <button
+                onClick={handleImageClick}
+                disabled={disabled || images.length >= 4}
+                className={`p-2 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                title="上传图片（最多4张）"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </>
+          )}
           
           <textarea
             ref={textareaRef}
@@ -290,8 +304,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className={`flex-1 bg-transparent ${isDark ? 'text-white placeholder-gray-400' : 'text-gray-900 placeholder-gray-500'} resize-none px-2 py-1.5 focus:outline-none disabled:opacity-50`}
-            style={{ maxHeight: '200px' }}
+            className={`flex-1 bg-transparent ${isDark ? 'text-white placeholder-gray-400' : 'text-gray-900 placeholder-gray-500'} resize-none px-2 py-1.5 focus:outline-none disabled:opacity-50 overflow-hidden`}
+            style={{ 
+              height: '36px',
+              minHeight: '36px',
+              maxHeight: '200px',
+              whiteSpace: content.trim() ? 'pre-wrap' : 'nowrap',
+              textOverflow: 'ellipsis'
+            }}
           />
           {isStreaming && onStop ? (
             <button
@@ -325,7 +345,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         {/* Only show hint on web, not in native app */}
         {!isNativeApp && (
           <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-2 text-center`}>
-            按 Enter 发送，Shift + Enter 换行，支持上传图片
+            按 Enter 发送，Shift + Enter 换行{showImageUpload ? '，支持上传图片' : ''}
           </p>
         )}
       </div>

@@ -3,6 +3,8 @@
  * 
  * Displays all messages in a chat session with auto-scroll.
  * Supports light/dark theme.
+ * Preserves scroll position when app is backgrounded/resumed.
+ * Instantly scrolls to bottom when switching sessions.
  * 
  * Requirements: 2.3, 2.4
  */
@@ -12,6 +14,8 @@ import { Keyboard } from '@capacitor/keyboard';
 import type { Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { useThemeStore } from '../../store/theme-store';
+import { useScrollRestore } from '../../lib/utils/use-scroll-restore';
+import { useChatStore } from '../../store/chat-store';
 
 interface MessageListProps {
   messages: Message[];
@@ -23,8 +27,16 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
+  
+  // Get current session ID to detect session changes
+  const currentSessionId = useChatStore((state) => state.currentSessionId);
+
+  // Use scroll restore hook
+  useScrollRestore(containerRef);
 
   // Check if scroll is at bottom
   const checkIfAtBottom = useCallback(() => {
@@ -42,6 +54,18 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
       bottomRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
     }
   }, []);
+
+  // Detect session change and reset initial load state
+  useEffect(() => {
+    if (currentSessionId !== lastSessionId) {
+      setLastSessionId(currentSessionId);
+      setIsInitialLoad(true);
+      // Immediately scroll to bottom without animation when session changes
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
+    }
+  }, [currentSessionId, lastSessionId, scrollToBottom]);
 
   // Handle keyboard events for native app
   useEffect(() => {
@@ -88,17 +112,32 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
     return () => container.removeEventListener('scroll', checkIfAtBottom);
   }, [checkIfAtBottom]);
 
-  // Auto-scroll to bottom when messages change or streaming content updates
+  // Initial scroll to bottom without animation (on first load or session change)
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, messages.length, scrollToBottom]);
+    if (isInitialLoad && messages.length > 0) {
+      // Use instant scroll for initial load to avoid visible animation
+      scrollToBottom(false);
+      // Mark initial load as complete after a short delay
+      const timer = setTimeout(() => {
+        setIsInitialLoad(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialLoad, messages.length, scrollToBottom]);
+
+  // Auto-scroll to bottom when new messages are added (after initial load)
+  useEffect(() => {
+    if (!isInitialLoad && isAtBottom) {
+      scrollToBottom(true);
+    }
+  }, [messages.length, isInitialLoad, isAtBottom, scrollToBottom]);
 
   // Also scroll when any message content changes (for streaming)
   useEffect(() => {
-    if (isAtBottom) {
-      scrollToBottom();
+    if (isAtBottom && !isInitialLoad) {
+      scrollToBottom(true);
     }
-  }, [messages.map(m => m.content).join(''), isAtBottom, scrollToBottom]);
+  }, [messages.map(m => m.content).join(''), isAtBottom, isInitialLoad, scrollToBottom]);
 
   if (messages.length === 0) {
     return (

@@ -16,7 +16,7 @@ interface ConfigFormProps {
   isLoading?: boolean;
 }
 
-const PROVIDERS: AIProvider[] = ['openai', 'anthropic', 'google', 'openai-compatible'];
+const PROVIDERS: AIProvider[] = ['openai', 'anthropic', 'google', 'openai-compatible', 'image-generation'];
 
 const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   'openai': [
@@ -48,7 +48,32 @@ const DEFAULT_MODELS: Record<AIProvider, string[]> = {
     'gemini-2.5-flash-lite',
   ],
   'openai-compatible': [],
+  'image-generation': [],
 };
+
+// 文生图 API 预设类型
+interface ImageApiPreset {
+  name: string;
+  url: string;
+  models: string[];
+  tokenPrefix: string;
+}
+
+// 常用文生图 API 预设
+const IMAGE_API_PRESETS: ImageApiPreset[] = [
+  {
+    name: '魔搭社区-ModelScope',
+    url: 'https://api-inference.modelscope.cn',
+    models: [],
+    tokenPrefix: ''
+  },
+  {
+    name: '自定义',
+    url: '',
+    models: [],
+    tokenPrefix: ''
+  }
+];
 
 export const ConfigForm: React.FC<ConfigFormProps> = ({
   config,
@@ -63,6 +88,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
   const [apiKey, setApiKey] = useState(config?.apiKey ?? '');
   const [isDefault, setIsDefault] = useState(config?.isDefault ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [selectedPreset, setSelectedPreset] = useState(0);
 
   // Update API URL and model when provider changes
   useEffect(() => {
@@ -74,8 +100,26 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
       } else {
         setModelName('');
       }
+      // Reset preset for image generation
+      if (provider === 'image-generation') {
+        setSelectedPreset(0);
+        setApiUrl(IMAGE_API_PRESETS[0].url);
+        setModelName('');
+      }
     }
   }, [provider, config]);
+
+  // Handle preset change for image generation
+  const handlePresetChange = (presetIndex: number) => {
+    setSelectedPreset(presetIndex);
+    const preset = IMAGE_API_PRESETS[presetIndex];
+    setApiUrl(preset.url);
+    if (preset.models.length > 0) {
+      setModelName(preset.models[0]);
+    } else {
+      setModelName('');
+    }
+  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -92,7 +136,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
       newErrors.modelName = '请输入模型名称';
     }
     
-    if (provider === 'openai-compatible' && !apiUrl.trim()) {
+    if ((provider === 'openai-compatible' || provider === 'image-generation') && !apiUrl.trim()) {
       newErrors.apiUrl = '请输入 API 地址';
     }
     
@@ -115,6 +159,10 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
     });
   };
 
+  // Check if this is an image generation provider
+  const isImageProvider = provider === 'image-generation';
+  const currentPreset = IMAGE_API_PRESETS[selectedPreset];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Name */}
@@ -125,7 +173,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
           value={name}
           onChange={(e) => setName(e.target.value.slice(0, 20))}
           maxLength={20}
-          placeholder="例如：我的 GPT-4"
+          placeholder={isImageProvider ? "例如：我的文生图" : "例如：我的 GPT-4"}
           className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {errors.name && <p className="text-red-400 text-sm mt-1">{errors.name}</p>}
@@ -143,13 +191,37 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
             <option key={p} value={p}>{PROVIDER_NAMES[p]}</option>
           ))}
         </select>
+        {isImageProvider && (
+          <p className="text-blue-400 text-xs mt-1">
+            🎨 文生图模式：输入文字描述，AI 将生成对应的图片
+          </p>
+        )}
       </div>
+
+      {/* Image API Preset (only for image-generation) */}
+      {isImageProvider && (
+        <div>
+          <label className="block text-sm font-medium mb-1">API 预设</label>
+          <select
+            value={selectedPreset}
+            onChange={(e) => handlePresetChange(Number(e.target.value))}
+            className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {IMAGE_API_PRESETS.map((preset, index) => (
+              <option key={index} value={index}>{preset.name}</option>
+            ))}
+          </select>
+          <p className="text-gray-400 text-xs mt-1">
+            选择预设可快速配置常用的文生图 API
+          </p>
+        </div>
+      )}
 
       {/* API URL */}
       <div>
         <label className="block text-sm font-medium mb-1">
           API 地址
-          {provider !== 'openai-compatible' && (
+          {provider !== 'openai-compatible' && provider !== 'image-generation' && (
             <span className="text-gray-400 font-normal ml-2">(可选，使用默认地址)</span>
           )}
         </label>
@@ -157,15 +229,22 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
           type="text"
           value={apiUrl}
           onChange={(e) => setApiUrl(e.target.value)}
-          placeholder={DEFAULT_API_URLS[provider] || '请输入 API 地址'}
+          placeholder={isImageProvider ? "例如：https://api-inference.modelscope.cn" : (DEFAULT_API_URLS[provider] || '请输入 API 地址')}
           className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {errors.apiUrl && <p className="text-red-400 text-sm mt-1">{errors.apiUrl}</p>}
+        {isImageProvider && (
+          <p className="text-gray-400 text-xs mt-1">
+            API 需支持 POST /v1/images/generations 接口
+          </p>
+        )}
       </div>
 
       {/* Model Name */}
       <div>
-        <label className="block text-sm font-medium mb-1">模型名称</label>
+        <label className="block text-sm font-medium mb-1">
+          {isImageProvider ? '图像模型' : '模型名称'}
+        </label>
         {DEFAULT_MODELS[provider].length > 0 ? (
           <select
             value={modelName}
@@ -177,12 +256,34 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
             ))}
             <option value="custom">自定义...</option>
           </select>
+        ) : isImageProvider && currentPreset.models.length > 0 ? (
+          <>
+            <select
+              value={currentPreset.models.includes(modelName) ? modelName : 'custom'}
+              onChange={(e) => setModelName(e.target.value)}
+              className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {currentPreset.models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+              <option value="custom">自定义...</option>
+            </select>
+            {!currentPreset.models.includes(modelName) && modelName !== 'custom' && (
+              <input
+                type="text"
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder="请输入模型名称"
+                className="w-full px-3 py-2 mt-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
+          </>
         ) : (
           <input
             type="text"
             value={modelName}
             onChange={(e) => setModelName(e.target.value)}
-            placeholder="请输入模型名称"
+            placeholder={isImageProvider ? "例如：Qwen/Qwen-Image-2512" : "请输入模型名称"}
             className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         )}
@@ -199,12 +300,14 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
 
       {/* API Key */}
       <div>
-        <label className="block text-sm font-medium mb-1">API Key</label>
+        <label className="block text-sm font-medium mb-1">
+          {isImageProvider ? 'API Token' : 'API Key'}
+        </label>
         <input
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="请输入 API Key"
+          placeholder={isImageProvider && currentPreset.tokenPrefix ? `请输入 Token (${currentPreset.tokenPrefix}xxx)` : "请输入 API Key"}
           className="w-full px-3 py-2 bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {errors.apiKey && <p className="text-red-400 text-sm mt-1">{errors.apiKey}</p>}

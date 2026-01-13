@@ -8,7 +8,7 @@
  * Requirements: 6.2
  */
 
-import type { AIAdapter, Message, ImageAttachment } from '../../types';
+import type { AIAdapter, Message, ImageAttachment, ImageGenerationParams } from '../../types';
 import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 interface AnthropicContentBlock {
@@ -113,7 +113,12 @@ export class AnthropicAdapter implements AIAdapter {
   /**
    * Send a message and stream the response
    */
-  async *sendMessage(message: string, history: Message[], images?: ImageAttachment[]): AsyncGenerator<string, void, unknown> {
+  async *sendMessage(
+    message: string, 
+    history: Message[], 
+    images?: ImageAttachment[],
+    _imageParams?: ImageGenerationParams  // Not used for chat models
+  ): AsyncGenerator<string, void, unknown> {
     const messages = this.formatMessages(message, history, images);
     
     const response = await fetchWithTimeout(`${this.apiUrl}/v1/messages`, {

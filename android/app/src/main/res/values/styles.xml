@@ -13,10 +13,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- Enable edge-to-edge display -->
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Use solid color for status bar to avoid overlap -->
+        <item name="android:statusBarColor">#1f2937</item>
+        <item name="android:navigationBarColor">#111827</item>
     </style>
 
     <!-- No splash screen launch theme -->
