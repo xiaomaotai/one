@@ -51,13 +51,21 @@ const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   'image-generation': [],
 };
 
+// 文生图 API 预设类型
+interface ImageApiPreset {
+  name: string;
+  url: string;
+  models: string[];
+  tokenPrefix: string;
+}
+
 // 常用文生图 API 预设
-const IMAGE_API_PRESETS = [
+const IMAGE_API_PRESETS: ImageApiPreset[] = [
   {
-    name: 'ModelScope',
+    name: '魔搭社区-ModelScope',
     url: 'https://api-inference.modelscope.cn',
-    models: ['Qwen/Qwen-Image-2512', 'Tongyi-MAI/Z-Image-Turbo'],
-    tokenPrefix: 'ms-'
+    models: [],
+    tokenPrefix: ''
   },
   {
     name: '自定义',
@@ -96,9 +104,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
       if (provider === 'image-generation') {
         setSelectedPreset(0);
         setApiUrl(IMAGE_API_PRESETS[0].url);
-        if (IMAGE_API_PRESETS[0].models.length > 0) {
-          setModelName(IMAGE_API_PRESETS[0].models[0]);
-        }
+        setModelName('');
       }
     }
   }, [provider, config]);
