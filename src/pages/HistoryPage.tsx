@@ -2,6 +2,7 @@
  * History Page
  * 
  * Displays all chat sessions with preview, selection, and deletion.
+ * Time display is based on the last message timestamp, not session updatedAt.
  * 
  * Requirements: 3.3, 3.4, 3.5, 5.2, 5.3
  */
@@ -27,6 +28,17 @@ const formatDate = (date: Date): string => {
   } else {
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
   }
+};
+
+// Get the last message time for a session
+// Only counts actual message timestamps, not session access time
+const getLastMessageTime = (session: ChatSession): Date => {
+  if (session.messages.length === 0) {
+    return session.createdAt;
+  }
+  // Get the timestamp of the last message
+  const lastMessage = session.messages[session.messages.length - 1];
+  return lastMessage.timestamp;
 };
 
 // Get session preview text
@@ -163,7 +175,8 @@ export const HistoryPage: React.FC = () => {
                     {getPreview(session)}
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                    <span>{formatDate(session.updatedAt)}</span>
+                    {/* Use last message time instead of session updatedAt */}
+                    <span>{formatDate(getLastMessageTime(session))}</span>
                     <span>{session.messages.length} 条消息</span>
                   </div>
                 </div>

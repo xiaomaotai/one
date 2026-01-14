@@ -1,20 +1,20 @@
 /**
  * Message List Component
- * 
+ *
  * Displays all messages in a chat session with auto-scroll.
  * Supports light/dark theme.
  * Preserves scroll position when app is backgrounded/resumed.
- * Instantly scrolls to bottom when switching sessions.
- * 
+ * Uses flex-direction: column-reverse to naturally start at bottom (no flash).
+ *
  * Requirements: 2.3, 2.4
  */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
+import { App } from '@capacitor/app';
 import type { Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { useThemeStore } from '../../store/theme-store';
-import { useScrollRestore } from '../../lib/utils/use-scroll-restore';
 import { useChatStore } from '../../store/chat-store';
 
 interface MessageListProps {
@@ -24,48 +24,83 @@ interface MessageListProps {
 }
 
 export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMessageId, onResend }) => {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const savedScrollPositionRef = useRef<number | null>(null);
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
   
   // Get current session ID to detect session changes
   const currentSessionId = useChatStore((state) => state.currentSessionId);
+  const lastSessionIdRef = useRef<string | null>(null);
 
-  // Use scroll restore hook
-  useScrollRestore(containerRef);
-
-  // Check if scroll is at bottom
+  // Check if scroll is at bottom (for column-reverse, scrollTop 0 means at bottom)
   const checkIfAtBottom = useCallback(() => {
     const container = containerRef.current;
     if (container) {
-      const threshold = 50; // pixels from bottom to consider "at bottom"
-      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      // In column-reverse, scrollTop = 0 means we're at the bottom (newest messages)
+      // scrollTop becomes negative as we scroll up to older messages
+      const threshold = 50;
+      const atBottom = Math.abs(container.scrollTop) < threshold;
       setIsAtBottom(atBottom);
     }
   }, []);
 
-  // Scroll to bottom
-  const scrollToBottom = useCallback((smooth = true) => {
-    if (bottomRef.current && typeof bottomRef.current.scrollIntoView === 'function') {
-      bottomRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+  // Scroll to bottom (in column-reverse, this means scrollTop = 0)
+  const scrollToBottom = useCallback(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
     }
   }, []);
 
-  // Detect session change and reset initial load state
+  // Detect session change and scroll to bottom
   useEffect(() => {
-    if (currentSessionId !== lastSessionId) {
-      setLastSessionId(currentSessionId);
-      setIsInitialLoad(true);
-      // Immediately scroll to bottom without animation when session changes
-      requestAnimationFrame(() => {
-        scrollToBottom(false);
-      });
+    if (currentSessionId !== lastSessionIdRef.current) {
+      lastSessionIdRef.current = currentSessionId;
+      // Reset scroll position for new session
+      savedScrollPositionRef.current = null;
+      // Scroll to bottom for new session
+      scrollToBottom();
     }
-  }, [currentSessionId, lastSessionId, scrollToBottom]);
+  }, [currentSessionId, scrollToBottom]);
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let stateChangeListener: { remove: () => void } | null = null;
+
+    const setupAppStateListener = async () => {
+      try {
+        stateChangeListener = await App.addListener('appStateChange', ({ isActive }) => {
+          if (!isActive) {
+            // App going to background - save scroll position
+            if (containerRef.current) {
+              savedScrollPositionRef.current = containerRef.current.scrollTop;
+            }
+          } else {
+            // App coming to foreground - restore scroll position
+            if (containerRef.current && savedScrollPositionRef.current !== null) {
+              const savedPosition = savedScrollPositionRef.current;
+              requestAnimationFrame(() => {
+                if (containerRef.current) {
+                  containerRef.current.scrollTop = savedPosition;
+                }
+              });
+            }
+          }
+        });
+      } catch (error) {
+        console.error('App state listener setup failed:', error);
+      }
+    };
+
+    setupAppStateListener();
+
+    return () => {
+      stateChangeListener?.remove();
+    };
+  }, []);
 
   // Handle keyboard events for native app
   useEffect(() => {
@@ -79,15 +114,14 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
         // When keyboard shows, scroll to bottom if we were at bottom
         keyboardShowListener = await Keyboard.addListener('keyboardWillShow', () => {
           if (isAtBottom) {
-            // Small delay to let the keyboard animation start
-            setTimeout(() => scrollToBottom(false), 50);
+            setTimeout(scrollToBottom, 50);
           }
         });
 
         // When keyboard hides, scroll to bottom if we were at bottom
         keyboardHideListener = await Keyboard.addListener('keyboardWillHide', () => {
           if (isAtBottom) {
-            setTimeout(() => scrollToBottom(false), 50);
+            setTimeout(scrollToBottom, 50);
           }
         });
       } catch (error) {
@@ -112,32 +146,19 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
     return () => container.removeEventListener('scroll', checkIfAtBottom);
   }, [checkIfAtBottom]);
 
-  // Initial scroll to bottom without animation (on first load or session change)
+  // Auto-scroll to bottom when new messages are added (if already at bottom)
   useEffect(() => {
-    if (isInitialLoad && messages.length > 0) {
-      // Use instant scroll for initial load to avoid visible animation
-      scrollToBottom(false);
-      // Mark initial load as complete after a short delay
-      const timer = setTimeout(() => {
-        setIsInitialLoad(false);
-      }, 100);
-      return () => clearTimeout(timer);
+    if (isAtBottom) {
+      scrollToBottom();
     }
-  }, [isInitialLoad, messages.length, scrollToBottom]);
-
-  // Auto-scroll to bottom when new messages are added (after initial load)
-  useEffect(() => {
-    if (!isInitialLoad && isAtBottom) {
-      scrollToBottom(true);
-    }
-  }, [messages.length, isInitialLoad, isAtBottom, scrollToBottom]);
+  }, [messages.length, isAtBottom, scrollToBottom]);
 
   // Also scroll when any message content changes (for streaming)
   useEffect(() => {
-    if (isAtBottom && !isInitialLoad) {
-      scrollToBottom(true);
+    if (isAtBottom) {
+      scrollToBottom();
     }
-  }, [messages.map(m => m.content).join(''), isAtBottom, isInitialLoad, scrollToBottom]);
+  }, [messages.map(m => m.content).join(''), isAtBottom, scrollToBottom]);
 
   if (messages.length === 0) {
     return (
@@ -153,14 +174,18 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
     );
   }
 
+  // Use flex-direction: column-reverse so content naturally starts at bottom
+  // Messages are reversed in the array so they display in correct order
+  const reversedMessages = [...messages].reverse();
+
   return (
     <div 
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3"
+      className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 flex flex-col-reverse"
       onScroll={checkIfAtBottom}
     >
-      <div className="max-w-3xl mx-auto space-y-3">
-        {messages.map((message) => (
+      <div className="max-w-3xl mx-auto w-full space-y-3 flex flex-col-reverse">
+        {reversedMessages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
@@ -168,7 +193,6 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, streamingMes
             onResend={onResend}
           />
         ))}
-        <div ref={bottomRef} />
       </div>
     </div>
   );

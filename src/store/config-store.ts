@@ -16,6 +16,7 @@ interface ConfigState {
   deleteConfig: (id: string) => void;
   setCurrentConfig: (id: string | null) => void;
   setDefault: (id: string) => void;
+  reorderConfigs: (fromIndex: number, toIndex: number) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -53,6 +54,14 @@ export const useConfigStore = create<ConfigState>()(
           isDefault: c.id === id
         }))
       })),
+      
+      // Reorder configs by moving item from fromIndex to toIndex
+      reorderConfigs: (fromIndex, toIndex) => set((state) => {
+        const newConfigs = [...state.configs];
+        const [movedItem] = newConfigs.splice(fromIndex, 1);
+        newConfigs.splice(toIndex, 0, movedItem);
+        return { configs: newConfigs };
+      }),
       
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),

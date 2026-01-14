@@ -140,6 +140,8 @@ export class ChatManager {
 
   /**
    * Switch session's config
+   * Note: This only changes the config, does NOT update updatedAt
+   * because switching model is not a content change
    */
   async switchSessionConfig(sessionId: string, configId: string): Promise<void> {
     const session = await storageManager.loadSession(sessionId);
@@ -153,7 +155,8 @@ export class ChatManager {
     }
 
     session.configId = configId;
-    session.updatedAt = new Date();
+    // Do NOT update updatedAt - switching model is not a content change
+    // session.updatedAt = new Date();
     await storageManager.saveSession(session);
   }
 
