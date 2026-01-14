@@ -3,6 +3,7 @@
  * 
  * Displays and allows editing of image generation parameters.
  * Only shown when using image-generation provider.
+ * Only includes: size, steps, and guidanceScale parameters.
  * 
  */
 import React, { useState } from 'react';
@@ -41,25 +42,23 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
   };
 
   const handleReset = () => {
-    onChange({ ...DEFAULT_IMAGE_PARAMS });
-  };
-
-  const handleRandomSeed = () => {
+    // Only reset the 3 supported parameters
     onChange({
       ...params,
-      seed: Math.floor(Math.random() * 2147483647)
+      size: DEFAULT_IMAGE_PARAMS.size,
+      steps: DEFAULT_IMAGE_PARAMS.steps,
+      guidanceScale: DEFAULT_IMAGE_PARAMS.guidanceScale
     });
   };
 
   return (
     <div className={`border-b ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
-      {/* Header - always visible */}
+      {/* Header - always visible, no emoji/image before text */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className={`w-full px-4 py-2 flex items-center justify-between ${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-100'} transition-colors`}
       >
         <div className="flex items-center gap-2">
-          <span className="text-lg">🎨</span>
           <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
             图片生成参数
           </span>
@@ -79,31 +78,22 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
         </svg>
       </button>
 
-      {/* Collapsed summary */}
+      {/* Collapsed summary - only show the 3 supported parameters */}
       {isCollapsed && (
         <div className={`px-4 pb-2 flex flex-wrap gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
           <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-            {params.size || '1024x1024'}
+            {params.size || DEFAULT_IMAGE_PARAMS.size}
           </span>
-          {params.steps && (
-            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-              {params.steps} 步
-            </span>
-          )}
-          {params.guidanceScale && (
-            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-              CFG {params.guidanceScale}
-            </span>
-          )}
-          {params.seed !== undefined && (
-            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
-              种子 {params.seed}
-            </span>
-          )}
+          <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+            {params.steps || DEFAULT_IMAGE_PARAMS.steps} 步
+          </span>
+          <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+            CFG {params.guidanceScale || DEFAULT_IMAGE_PARAMS.guidanceScale}
+          </span>
         </div>
       )}
 
-      {/* Expanded panel */}
+      {/* Expanded panel - only 3 parameters: size, steps, guidanceScale */}
       {!isCollapsed && (
         <div className="px-4 pb-4 space-y-4">
           {/* Size */}
@@ -112,7 +102,7 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
               图片尺寸
             </label>
             <select
-              value={params.size || '1024x1024'}
+              value={params.size || DEFAULT_IMAGE_PARAMS.size}
               onChange={(e) => handleChange('size', e.target.value as ImageGenerationParams['size'])}
               className={`w-full px-3 py-1.5 text-sm rounded-lg ${isDark ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
             >
@@ -125,14 +115,14 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
           {/* Steps */}
           <div>
             <label className={`block text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              推理步数: {params.steps || 30}
+              推理步数: {params.steps || DEFAULT_IMAGE_PARAMS.steps}
             </label>
             <input
               type="range"
               min="10"
               max="100"
               step="5"
-              value={params.steps || 30}
+              value={params.steps || DEFAULT_IMAGE_PARAMS.steps}
               onChange={(e) => handleChange('steps', parseInt(e.target.value))}
               className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gray-600"
             />
@@ -145,14 +135,14 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
           {/* Guidance Scale */}
           <div>
             <label className={`block text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              引导强度 (CFG): {params.guidanceScale || 7.5}
+              引导强度 (CFG): {params.guidanceScale || DEFAULT_IMAGE_PARAMS.guidanceScale}
             </label>
             <input
               type="range"
               min="1"
               max="20"
               step="0.5"
-              value={params.guidanceScale || 7.5}
+              value={params.guidanceScale || DEFAULT_IMAGE_PARAMS.guidanceScale}
               onChange={(e) => handleChange('guidanceScale', parseFloat(e.target.value))}
               className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gray-600"
             />
@@ -160,57 +150,6 @@ export const ImageParamsPanel: React.FC<ImageParamsPanelProps> = ({
               <span>1 (自由)</span>
               <span>20 (严格)</span>
             </div>
-          </div>
-
-          {/* Seed */}
-          <div>
-            <label className={`block text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              随机种子 (留空为随机)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={params.seed ?? ''}
-                onChange={(e) => handleChange('seed', e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder="随机"
-                className={`flex-1 px-3 py-1.5 text-sm rounded-lg ${isDark ? 'bg-gray-700 text-white border-gray-600 placeholder-gray-500' : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
-              />
-              <button
-                onClick={handleRandomSeed}
-                className={`px-3 py-1.5 text-sm rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} transition-colors`}
-                title="生成随机种子"
-              >
-                🎲
-              </button>
-            </div>
-          </div>
-
-          {/* Negative Prompt */}
-          <div>
-            <label className={`block text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              负面提示词 (避免生成的内容)
-            </label>
-            <textarea
-              value={params.negativePrompt || ''}
-              onChange={(e) => handleChange('negativePrompt', e.target.value)}
-              placeholder="例如: blurry, low quality, distorted"
-              rows={2}
-              className={`w-full px-3 py-1.5 text-sm rounded-lg ${isDark ? 'bg-gray-700 text-white border-gray-600 placeholder-gray-500' : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'} border focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none`}
-            />
-          </div>
-
-          {/* Style */}
-          <div>
-            <label className={`block text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              风格预设 (可选)
-            </label>
-            <input
-              type="text"
-              value={params.style || ''}
-              onChange={(e) => handleChange('style', e.target.value)}
-              placeholder="例如: anime, photorealistic, oil painting"
-              className={`w-full px-3 py-1.5 text-sm rounded-lg ${isDark ? 'bg-gray-700 text-white border-gray-600 placeholder-gray-500' : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            />
           </div>
 
           {/* Reset button */}

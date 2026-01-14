@@ -149,6 +149,13 @@ export class ConfigurationManager {
   }
 
   /**
+   * Reorder configurations (save sort order)
+   */
+  async reorderConfigs(configIds: string[]): Promise<void> {
+    await storageManager.saveConfigsOrder(configIds);
+  }
+
+  /**
    * Validate configuration input
    */
   validateConfigInput(input: CreateConfigInput): ConfigValidationResult {

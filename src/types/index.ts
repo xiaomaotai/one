@@ -105,6 +105,7 @@ export interface ModelConfig {
   apiKey: string;
   isDefault: boolean;
   createdAt: Date;
+  sortOrder?: number;  // Sort order for drag-and-drop reordering
 }
 
 /** Create config input (without auto-generated fields) */
@@ -216,6 +217,7 @@ export interface SerializedModelConfig {
   apiKey: string;
   isDefault: boolean;
   createdAt: string;
+  sortOrder?: number;  // Sort order for drag-and-drop reordering
 }
 
 /** Serialized message for storage */

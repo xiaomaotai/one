@@ -39,11 +39,30 @@ export class StorageManager implements IStorageManager {
 
   /**
    * Load all model configurations from storage
+   * Sorted by sortOrder (ascending), then by createdAt (descending) for configs without sortOrder
    */
   async loadConfigs(): Promise<ModelConfig[]> {
     const db = await getDB();
     const serialized = await db.getAll('configs');
-    return serialized.map(deserializeConfig);
+    const configs = serialized.map(deserializeConfig);
+    
+    // Sort by sortOrder first, then by createdAt for items without sortOrder
+    return configs.sort((a, b) => {
+      // If both have sortOrder, sort by sortOrder
+      if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+        return a.sortOrder - b.sortOrder;
+      }
+      // If only a has sortOrder, a comes first
+      if (a.sortOrder !== undefined) {
+        return -1;
+      }
+      // If only b has sortOrder, b comes first
+      if (b.sortOrder !== undefined) {
+        return 1;
+      }
+      // If neither has sortOrder, sort by createdAt (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
 
   /**
@@ -91,6 +110,26 @@ export class StorageManager implements IStorageManager {
         isDefault: config.id === id
       };
       await store.put(updated);
+    }
+    
+    await tx.done;
+  }
+
+  /**
+   * Save configs order (update sortOrder for all configs)
+   */
+  async saveConfigsOrder(configIds: string[]): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('configs', 'readwrite');
+    const store = tx.objectStore('configs');
+    
+    // Update sortOrder for each config
+    for (let i = 0; i < configIds.length; i++) {
+      const config = await store.get(configIds[i]);
+      if (config) {
+        config.sortOrder = i;
+        await store.put(config);
+      }
     }
     
     await tx.done;

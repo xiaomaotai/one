@@ -12,12 +12,17 @@
  * - ModelScope (api-inference.modelscope.cn)
  * - And other similar async image generation APIs
  * 
- * Note: Different APIs may support different parameters.
- * This adapter sends all configured parameters, but APIs will
- * typically ignore unsupported parameters without errors.
+ * Core parameters supported by most image generation APIs:
+ * - size: Image dimensions (e.g., "1024x1024")
+ * - steps: Number of inference steps
+ * - guidanceScale: CFG scale for prompt adherence
+ * 
+ * Other parameters (seed, negativePrompt, style) are passed through
+ * if provided, but APIs may ignore unsupported parameters.
  */
 
 import type { AIAdapter, Message, ImageAttachment, ImageGenerationParams } from '../../types';
+import { DEFAULT_IMAGE_PARAMS } from '../../types';
 import { nativePost, nativeGet } from '../utils/native-http';
 
 interface ImageGenerationTaskResponse {
@@ -57,9 +62,9 @@ export class ImageGenerationAdapter implements AIAdapter {
   }
 
   /**
-   * Build request body with only non-empty parameters
-   * Different APIs support different parameters, so we only include
-   * parameters that have been explicitly set
+   * Build request body with parameters
+   * Uses default values for core parameters (size, steps, guidanceScale)
+   * if not explicitly provided
    */
   private buildRequestBody(prompt: string, params?: ImageGenerationParams): Record<string, unknown> {
     const requestBody: Record<string, unknown> = {
@@ -67,53 +72,61 @@ export class ImageGenerationAdapter implements AIAdapter {
       prompt: prompt
     };
 
-    if (!params) {
-      return requestBody;
-    }
+    // Merge with defaults for core parameters
+    const effectiveParams: ImageGenerationParams = {
+      size: params?.size || DEFAULT_IMAGE_PARAMS.size,
+      steps: params?.steps || DEFAULT_IMAGE_PARAMS.steps,
+      guidanceScale: params?.guidanceScale || DEFAULT_IMAGE_PARAMS.guidanceScale,
+      // Optional parameters - only include if explicitly set
+      n: params?.n,
+      negativePrompt: params?.negativePrompt,
+      seed: params?.seed,
+      style: params?.style
+    };
 
     // Size - try multiple formats for compatibility
-    if (params.size) {
-      requestBody.size = params.size;
+    if (effectiveParams.size) {
+      requestBody.size = effectiveParams.size;
       // Also try width/height format for some APIs
-      const [width, height] = params.size.split('x').map(Number);
+      const [width, height] = effectiveParams.size.split('x').map(Number);
       if (width && height) {
         requestBody.width = width;
         requestBody.height = height;
       }
     }
 
+    // Steps - always include (uses default if not set)
+    if (effectiveParams.steps !== undefined && effectiveParams.steps > 0) {
+      requestBody.steps = effectiveParams.steps;
+      requestBody.num_inference_steps = effectiveParams.steps;
+    }
+
+    // Guidance scale / CFG - always include (uses default if not set)
+    if (effectiveParams.guidanceScale !== undefined && effectiveParams.guidanceScale > 0) {
+      requestBody.guidance_scale = effectiveParams.guidanceScale;
+      requestBody.cfg_scale = effectiveParams.guidanceScale;
+    }
+
     // Number of images - only if explicitly set and > 0
-    if (params.n && params.n > 0) {
-      requestBody.n = params.n;
-      requestBody.num_images = params.n;
+    if (effectiveParams.n && effectiveParams.n > 0) {
+      requestBody.n = effectiveParams.n;
+      requestBody.num_images = effectiveParams.n;
     }
 
     // Negative prompt - only if not empty
-    if (params.negativePrompt && params.negativePrompt.trim()) {
-      requestBody.negative_prompt = params.negativePrompt.trim();
-    }
-
-    // Guidance scale / CFG - only if explicitly set
-    if (params.guidanceScale !== undefined && params.guidanceScale > 0) {
-      requestBody.guidance_scale = params.guidanceScale;
-      requestBody.cfg_scale = params.guidanceScale;
-    }
-
-    // Steps - only if explicitly set
-    if (params.steps !== undefined && params.steps > 0) {
-      requestBody.steps = params.steps;
-      requestBody.num_inference_steps = params.steps;
+    if (effectiveParams.negativePrompt && effectiveParams.negativePrompt.trim()) {
+      requestBody.negative_prompt = effectiveParams.negativePrompt.trim();
     }
 
     // Seed - only if explicitly set (0 is a valid seed)
-    if (params.seed !== undefined) {
-      requestBody.seed = params.seed;
+    if (effectiveParams.seed !== undefined) {
+      requestBody.seed = effectiveParams.seed;
     }
 
     // Style - only if not empty
-    if (params.style && params.style.trim()) {
-      requestBody.style = params.style.trim();
-      requestBody.style_preset = params.style.trim();
+    if (effectiveParams.style && effectiveParams.style.trim()) {
+      requestBody.style = effectiveParams.style.trim();
+      requestBody.style_preset = effectiveParams.style.trim();
     }
 
     return requestBody;
