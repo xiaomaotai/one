@@ -37,39 +37,68 @@ const generateId = (): string => {
 const compressImageFromDataUrl = async (dataUrl: string, maxSizeKB: number = 500): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Set crossOrigin to handle potential CORS issues
+    img.crossOrigin = 'anonymous';
+
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      
-      // Scale down if too large
-      const maxDim = 1024;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = (height / width) * maxDim;
-          width = maxDim;
-        } else {
-          width = (width / height) * maxDim;
-          height = maxDim;
+      try {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+
+        // Scale down if too large
+        const maxDim = 1024;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = (height / width) * maxDim;
+            width = maxDim;
+          } else {
+            width = (width / height) * maxDim;
+            height = maxDim;
+          }
         }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+
+        // Fill with white background first (for transparent PNGs)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw the image
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Try different quality levels
+        let quality = 0.9;
+        let result = canvas.toDataURL('image/jpeg', quality);
+
+        while (result.length > maxSizeKB * 1024 && quality > 0.1) {
+          quality -= 0.1;
+          result = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        resolve(result);
+      } catch (err) {
+        reject(err);
       }
-      
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-      
-      // Try different quality levels
-      let quality = 0.9;
-      let result = canvas.toDataURL('image/jpeg', quality);
-      
-      while (result.length > maxSizeKB * 1024 && quality > 0.1) {
-        quality -= 0.1;
-        result = canvas.toDataURL('image/jpeg', quality);
-      }
-      
-      resolve(result);
     };
-    img.onerror = reject;
+
+    img.onerror = (e) => {
+      console.error('Image load error:', e);
+      // If image fails to load, return original dataUrl
+      resolve(dataUrl);
+    };
+
+    // For data URLs, we need to handle them specially
+    // Remove crossOrigin for data URLs as it can cause issues
+    if (dataUrl.startsWith('data:')) {
+      img.crossOrigin = '';
+    }
+
     img.src = dataUrl;
   });
 };
@@ -251,9 +280,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       <div className="max-w-3xl mx-auto">
         {/* Image Preview */}
         {images.length > 0 && (
-          <div className="flex gap-2 mb-2 flex-wrap">
+          <div className="flex gap-2 mb-2 flex-wrap" role="list" aria-label="已选择的图片">
             {images.map((img) => (
-              <div key={img.id} className="relative">
+              <div key={img.id} className="relative" role="listitem">
                 <img
                   src={img.data}
                   alt={img.name || '上传的图片'}
@@ -263,6 +292,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 <button
                   onClick={(e) => handleRemoveImage(e, img.id)}
                   className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs shadow-lg"
+                  aria-label={`移除图片 ${img.name || '上传的图片'}`}
                 >
                   ×
                 </button>
@@ -270,8 +300,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             ))}
           </div>
         )}
-        
-        <div className={`flex items-end gap-3 ${isDark ? 'bg-gray-700' : 'bg-white border border-gray-200'} rounded-xl p-2`}>
+
+        <div className={`flex items-end gap-3 ${isDark ? 'bg-gray-700' : 'bg-white border border-gray-200'} rounded-xl p-2`} role="group" aria-label="消息输入区域">
           {/* Image Upload Button - only show if not hidden */}
           {showImageUpload && (
             <>
@@ -279,9 +309,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 onClick={handleImageClick}
                 disabled={disabled || images.length >= 4}
                 className={`p-2 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-                title="上传图片（最多4张）"
+                aria-label={images.length >= 4 ? '已达到最大图片数量' : '上传图片（最多4张）'}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </button>
@@ -292,10 +322,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 multiple
                 onChange={handleFileChange}
                 className="hidden"
+                aria-hidden="true"
               />
             </>
           )}
-          
+
           <textarea
             ref={textareaRef}
             value={content}
@@ -304,8 +335,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
+            aria-label="输入消息"
             className={`flex-1 bg-transparent ${isDark ? 'text-white placeholder-gray-400' : 'text-gray-900 placeholder-gray-500'} resize-none px-2 py-1.5 focus:outline-none disabled:opacity-50 overflow-hidden`}
-            style={{ 
+            style={{
               height: '36px',
               minHeight: '36px',
               maxHeight: '200px',
@@ -317,9 +349,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             <button
               onClick={onStop}
               className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              title="停止生成"
+              aria-label="停止生成"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="6" y="6" width="12" height="12" rx="1" />
               </svg>
             </button>
@@ -328,14 +360,15 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               onClick={handleSubmit}
               disabled={disabled || (!content.trim() && images.length === 0)}
               className={`p-2 bg-blue-600 hover:bg-blue-700 ${isDark ? 'disabled:bg-gray-600' : 'disabled:bg-gray-300'} disabled:cursor-not-allowed text-white rounded-lg transition-colors`}
+              aria-label={disabled ? '发送中' : '发送消息'}
             >
               {disabled ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               )}

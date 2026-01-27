@@ -232,8 +232,9 @@ export class ChatManager {
     // 文生图模式需要更长的超时时间（5分钟），普通对话60秒
     const isImageGeneration = config.provider === 'image-generation';
     const TIMEOUT_MS = isImageGeneration ? 300000 : 60000; // 5分钟 vs 1分钟
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let timeoutId: ReturnType<typeof setInterval> | null = null;
     let lastChunkTime = Date.now();
+    let timeoutTriggered = false; // 标记是否是超时触发的中断
 
     try {
       // Notify stream start
@@ -242,16 +243,19 @@ export class ChatManager {
       // Create adapter and send message
       const adapter = createAdapter(config);
       const lastUserMessage = history[history.length - 1];
-      
+
       let fullContent = '';
-      
+
       // 设置超时检查
       const checkTimeout = () => {
         if (Date.now() - lastChunkTime > TIMEOUT_MS) {
+          timeoutTriggered = true; // 标记为超时触发
           abortController.abort();
-          const timeoutMsg = isImageGeneration 
+          const timeoutMsg = isImageGeneration
             ? '图片生成超时（5分钟无响应），请重试'
             : '响应超时（60秒无响应）';
+          // 直接更新消息和触发回调，不要在 catch 中重复处理
+          this.updateStreamingMessage(sessionId, messageId, timeoutMsg, false);
           this.callbacks.onStreamError?.(sessionId, messageId, timeoutMsg);
         }
       };
@@ -303,6 +307,16 @@ export class ChatManager {
       this.callbacks.onStreamEnd?.(sessionId, messageId, fullContent);
 
     } catch (error) {
+      // 如果是超时触发的中断，不要重复处理错误
+      if (timeoutTriggered) {
+        return;
+      }
+
+      // 如果是用户主动取消，不处理为错误
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       let errorMessage = error instanceof Error ? error.message : '未知错误';
       let friendlyMessage = errorMessage;
       

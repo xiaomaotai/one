@@ -1,16 +1,16 @@
 /**
  * Sidebar Component
- * 
+ *
  * Navigation sidebar with new chat button, chat history, and settings link.
  * Supports session title editing with 10 character limit.
  * Supports session deletion with confirmation.
  * Works as a drawer on mobile.
  * Supports light/dark theme.
  * Sessions are sorted by updatedAt in descending order (newest first).
- * 
+ *
  * Requirements: 8.1, 8.2
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../store/chat-store';
 import { useConfigStore, getDefaultConfig } from '../../store/config-store';
@@ -18,6 +18,7 @@ import { useThemeStore } from '../../store/theme-store';
 import { chatManager } from '../../lib/chat';
 import { configManager } from '../../lib/config';
 import { formatRelativeTime } from '../../lib/utils/date';
+import { useLocalToast } from '../ui/Toast';
 
 // Truncate title to max length with ellipsis
 const truncateTitle = (title: string, maxLength: number = 10): string => {
@@ -34,12 +35,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  
-  const { sessions, currentSessionId, setCurrentSession, setSessions, addSession, deleteSession } = useChatStore();
-  const { configs, setConfigs } = useConfigStore();
+
+  // Use local toast hook
+  const { toast, showToast, ToastComponent } = useLocalToast();
+
+  // Optimized Zustand selectors - fine-grained subscriptions
+  const sessions = useChatStore(state => state.sessions);
+  const currentSessionId = useChatStore(state => state.currentSessionId);
+  const setCurrentSession = useChatStore(state => state.setCurrentSession);
+  const setSessions = useChatStore(state => state.setSessions);
+  const addSession = useChatStore(state => state.addSession);
+  const deleteSession = useChatStore(state => state.deleteSession);
+
+  const configs = useConfigStore(state => state.configs);
+  const setConfigs = useConfigStore(state => state.setConfigs);
   const defaultConfig = useConfigStore(getDefaultConfig);
-  const theme = useThemeStore((state) => state.theme);
+  const theme = useThemeStore(state => state.theme);
   const isDark = theme === 'dark';
 
   // Sort sessions by updatedAt in descending order (newest first)
@@ -68,37 +79,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   }, [setSessions, setConfigs]);
 
   // Reset editing/delete states when drawer closes
-  const resetEditingStates = () => {
+  const resetEditingStates = useCallback(() => {
     setEditingSessionId(null);
     setEditTitle('');
     setDeleteConfirmId(null);
-  };
+  }, []);
 
   // Wrap onClose to reset states before closing
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     resetEditingStates();
     onClose?.();
-  };
-
-  // Show toast message
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 2000);
-  };
+  }, [resetEditingStates, onClose]);
 
   // Create new chat
-  const handleNewChat = async () => {
+  const handleNewChat = useCallback(async () => {
     // Check if the latest session (first in sorted list) is empty
     const latestSession = sortedSessions.length > 0 ? sortedSessions[0] : null;
     if (latestSession && latestSession.messages.length === 0) {
       // Switch to the empty session instead of creating a new one
       setCurrentSession(latestSession.id);
-      showToast('已有空白会话');
+      showToast('已有空白会话', 'info');
       navigate('/');
       handleClose();
       return;
     }
-    
+
     try {
       if (!defaultConfig && configs.length === 0) {
         navigate('/settings');
@@ -112,26 +117,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       handleClose();
     } catch (error) {
       console.error('创建会话失败:', error);
+      showToast('创建会话失败', 'error');
     }
-  };
+  }, [sortedSessions, setCurrentSession, showToast, navigate, handleClose, defaultConfig, configs.length, addSession]);
 
   // Select a session
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = useCallback((sessionId: string) => {
     if (isAnyOperationInProgress) return; // Don't select when editing or confirming delete
     setCurrentSession(sessionId);
     navigate('/');
     handleClose();
-  };
+  }, [isAnyOperationInProgress, setCurrentSession, navigate, handleClose]);
 
   // Start editing session title
-  const handleStartEdit = (e: React.MouseEvent, sessionId: string, currentTitle: string) => {
+  const handleStartEdit = useCallback((e: React.MouseEvent, sessionId: string, currentTitle: string) => {
     e.stopPropagation();
     setEditingSessionId(sessionId);
     setEditTitle(currentTitle.slice(0, 10));
-  };
+  }, []);
 
   // Save edited title (without reordering)
-  const handleSaveTitle = async (sessionId: string) => {
+  const handleSaveTitle = useCallback(async (sessionId: string) => {
     const trimmedTitle = editTitle.trim().slice(0, 10);
     if (trimmedTitle) {
       try {
@@ -145,14 +151,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         }
       } catch (error) {
         console.error('更新标题失败:', error);
+        showToast('更新标题失败', 'error');
       }
     }
     setEditingSessionId(null);
     setEditTitle('');
-  };
+  }, [editTitle, sessions, setSessions, showToast]);
 
   // Handle key press in edit input
-  const handleEditKeyDown = (e: React.KeyboardEvent, sessionId: string) => {
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent, sessionId: string) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSaveTitle(sessionId);
@@ -160,16 +167,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       setEditingSessionId(null);
       setEditTitle('');
     }
-  };
+  }, [handleSaveTitle]);
 
   // Handle delete click
-  const handleDeleteClick = (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteClick = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     setDeleteConfirmId(sessionId);
-  };
+  }, []);
 
   // Confirm delete
-  const handleConfirmDelete = async (e: React.MouseEvent, sessionId: string) => {
+  const handleConfirmDelete = useCallback(async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     try {
       await chatManager.deleteSession(sessionId);
@@ -183,26 +190,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           setCurrentSession(null);
         }
       }
+      showToast('已删除', 'success');
     } catch (error) {
       console.error('删除会话失败:', error);
+      showToast('删除失败', 'error');
     }
     setDeleteConfirmId(null);
-  };
+  }, [deleteSession, currentSessionId, sessions, setCurrentSession, showToast]);
 
   // Cancel delete
-  const handleCancelDelete = (e: React.MouseEvent) => {
+  const handleCancelDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteConfirmId(null);
-  };
+  }, []);
 
   return (
-    <aside className={`w-full ${isDark ? 'bg-gray-900' : 'bg-white'} flex flex-col h-full relative`}>
+    <aside
+      className={`w-full ${isDark ? 'bg-gray-900' : 'bg-white'} flex flex-col h-full relative`}
+      role="navigation"
+      aria-label="侧边栏导航"
+    >
       {/* Toast */}
-      {toast && (
-        <div className={`absolute top-16 left-1/2 transform -translate-x-1/2 ${isDark ? 'bg-gray-700 text-white' : 'bg-gray-800 text-white'} px-4 py-2 rounded-lg shadow-lg z-50 text-sm`}>
-          {toast}
-        </div>
-      )}
+      <ToastComponent {...toast} />
       
       {/* Header with close button */}
       <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>

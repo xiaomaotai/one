@@ -26,23 +26,23 @@ export const ChatPage: React.FC = () => {
   const location = useLocation();
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [imageParams, setImageParams] = useState<ImageGenerationParams>({ ...DEFAULT_IMAGE_PARAMS });
-  
-  // Store state
-  const {
-    currentSessionId,
-    setCurrentSession,
-    addSession,
-    addMessage,
-    updateMessage,
-    isStreaming,
-    setStreaming,
-    setSessions,
-    setSessionMessages
-  } = useChatStore();
-  
+
+  // Optimized Zustand selectors - fine-grained subscriptions
+  const currentSessionId = useChatStore(state => state.currentSessionId);
+  const setCurrentSession = useChatStore(state => state.setCurrentSession);
+  const addSession = useChatStore(state => state.addSession);
+  const addMessage = useChatStore(state => state.addMessage);
+  const updateMessage = useChatStore(state => state.updateMessage);
+  const updateSession = useChatStore(state => state.updateSession);
+  const isStreaming = useChatStore(state => state.isStreaming);
+  const setStreaming = useChatStore(state => state.setStreaming);
+  const setSessions = useChatStore(state => state.setSessions);
+  const setSessionMessages = useChatStore(state => state.setSessionMessages);
+  const setLastSendTime = useChatStore(state => state.setLastSendTime);
+
   const currentSession = useChatStore(getCurrentSession);
-  const configs = useConfigStore((state) => state.configs);
-  const setConfigs = useConfigStore((state) => state.setConfigs);
+  const configs = useConfigStore(state => state.configs);
+  const setConfigs = useConfigStore(state => state.setConfigs);
   
   // Get the config for current session (each session has its own model)
   const sessionConfig = useMemo(() => {
@@ -65,10 +65,10 @@ export const ChatPage: React.FC = () => {
         // Load configs
         const loadedConfigs = await configManager.getAllConfigs();
         setConfigs(loadedConfigs);
-        
+
         // Load sessions
         const loadedSessions = await chatManager.getAllSessions();
-        
+
         // Fix any incomplete streaming messages (app was closed during streaming)
         for (const session of loadedSessions) {
           for (const message of session.messages) {
@@ -88,20 +88,29 @@ export const ChatPage: React.FC = () => {
             }
           }
         }
-        
+
         setSessions(loadedSessions);
-        
-        // Set current session if there's one
+
+        // Set current session if there's one, or create a new one if we have configs
         if (loadedSessions.length > 0 && !currentSessionId) {
           setCurrentSession(loadedSessions[0].id);
+        } else if (loadedSessions.length === 0 && loadedConfigs.length > 0 && !currentSessionId) {
+          // No sessions but have configs - create a new session so model shows in header
+          try {
+            const newSession = await chatManager.createSession();
+            addSession(newSession);
+            setCurrentSession(newSession.id);
+          } catch (e) {
+            console.error('创建初始会话失败:', e);
+          }
         }
       } catch (error) {
         console.error('初始化失败:', error);
       }
     };
-    
+
     initData();
-  }, [setConfigs, setSessions, setCurrentSession, currentSessionId]);
+  }, [setConfigs, setSessions, setCurrentSession, currentSessionId, addSession]);
 
   // Reload configs when navigating back to this page (to sync config changes from settings)
   useEffect(() => {
@@ -134,14 +143,16 @@ export const ChatPage: React.FC = () => {
         updateMessage(sessionId, messageId, { content: fullContent, isStreaming: false });
         setStreamingMessageId(null);
         setStreaming(false);
+        setLastSendTime(null);  // Clear send time when conversation ends
       },
       onStreamError: (sessionId, messageId, error) => {
         updateMessage(sessionId, messageId, { content: `[错误] ${error}`, isStreaming: false });
         setStreamingMessageId(null);
         setStreaming(false);
+        setLastSendTime(null);  // Clear send time when conversation ends
       }
     });
-  }, [updateMessage, setStreaming]);
+  }, [updateMessage, setStreaming, setLastSendTime]);
 
   // Handle stop streaming
   const handleStopStreaming = useCallback(async () => {
@@ -172,30 +183,47 @@ export const ChatPage: React.FC = () => {
     try {
       // Create session if needed
       let sessionId = currentSessionId;
+      let isNewSession = false;
       if (!sessionId) {
         // Create new session with default config
         const session = await chatManager.createSession();
         addSession(session);
         setCurrentSession(session.id);
         sessionId = session.id;
+        isNewSession = true;
       }
 
+      // Set streaming state immediately when sending message (before waiting for response)
+      setStreaming(true);
+      setLastSendTime(Date.now());  // Track send time for model switch confirmation
+
+      // Check if this is the first message in the session (for title update)
+      const sessionBeforeSend = await chatManager.getSession(sessionId);
+      const isFirstMessage = sessionBeforeSend && sessionBeforeSend.messages.length === 0;
+
       // Get the session's config to check if it's image generation mode
-      const session = await chatManager.getSession(sessionId);
-      const config = session ? configs.find(c => c.id === session.configId) : undefined;
+      const config = sessionBeforeSend ? configs.find(c => c.id === sessionBeforeSend.configId) : undefined;
       const isImageMode = config?.provider === 'image-generation';
 
       // Send message with images and image params (for image generation mode)
       const userMessage = await chatManager.sendMessage(
-        sessionId, 
-        content, 
+        sessionId,
+        content,
         images,
         isImageMode ? imageParams : undefined
       );
-      
+
       // Add user message to store
       addMessage(sessionId, userMessage);
-      
+
+      // If this was the first message, update the session title in store
+      if (isFirstMessage || isNewSession) {
+        const updatedSession = await chatManager.getSession(sessionId);
+        if (updatedSession && updatedSession.title !== '新对话') {
+          updateSession(sessionId, { title: updatedSession.title });
+        }
+      }
+
       // Add placeholder for assistant message
       const updatedSession = await chatManager.getSession(sessionId);
       if (updatedSession) {
@@ -206,8 +234,10 @@ export const ChatPage: React.FC = () => {
       }
     } catch (error) {
       console.error('发送消息失败:', error);
+      // Reset streaming state on error
+      setStreaming(false);
     }
-  }, [currentSessionId, configs, navigate, addSession, setCurrentSession, addMessage, imageParams]);
+  }, [currentSessionId, configs, navigate, addSession, setCurrentSession, addMessage, imageParams, updateSession, setStreaming, setLastSendTime]);
 
   // Handle resend message
   const handleResendMessage = useCallback(async (messageId: string) => {
