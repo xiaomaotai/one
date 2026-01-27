@@ -10,7 +10,8 @@ interface ChatState {
   streamingContent: string;
   isLoading: boolean;
   error: string | null;
-  
+  lastSendTime: number | null;  // Track when last message was sent
+
   // Actions
   setSessions: (sessions: ChatSession[]) => void;
   addSession: (session: ChatSession) => void;
@@ -28,6 +29,7 @@ interface ChatState {
   setStreaming: (isStreaming: boolean) => void;
   setStreamingContent: (content: string) => void;
   appendStreamingContent: (chunk: string) => void;
+  setLastSendTime: (time: number | null) => void;
   
   // UI state
   setLoading: (loading: boolean) => void;
@@ -43,6 +45,7 @@ export const useChatStore = create<ChatState>()(
       streamingContent: '',
       isLoading: false,
       error: null,
+      lastSendTime: null,
 
       setSessions: (sessions) => set({ sessions }),
       
@@ -111,6 +114,7 @@ export const useChatStore = create<ChatState>()(
       appendStreamingContent: (chunk) => set((state) => ({
         streamingContent: state.streamingContent + chunk
       })),
+      setLastSendTime: (lastSendTime) => set({ lastSendTime }),
       
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
