@@ -166,13 +166,15 @@ export class ChatManager {
 
   /**
    * Send a message and get streaming response
+   * Returns both the user message and assistant placeholder so they can be
+   * added to the store synchronously before streaming chunks arrive.
    */
   async sendMessage(
-    sessionId: string, 
-    content: string, 
+    sessionId: string,
+    content: string,
     images?: ImageAttachment[],
     imageParams?: ImageGenerationParams
-  ): Promise<Message> {
+  ): Promise<{ userMessage: Message; assistantMessage: Message }> {
     // Load session
     const session = await storageManager.loadSession(sessionId);
     if (!session) {
@@ -212,7 +214,7 @@ export class ChatManager {
     // Start streaming response
     this.streamResponse(sessionId, assistantMessage.id, config, session.messages.concat(userMessage), imageParams);
 
-    return userMessage;
+    return { userMessage, assistantMessage };
   }
 
   /**

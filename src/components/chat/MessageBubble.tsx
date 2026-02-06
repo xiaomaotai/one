@@ -13,7 +13,10 @@
  *
  * Requirements: 2.3, 2.4
  */
-import React, { useState, useEffect, memo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 import type { Message } from '../../types';
 import { formatTime } from '../../lib/utils/date';
 import { useThemeStore } from '../../store/theme-store';
@@ -146,6 +149,7 @@ const TypingCursor: React.FC = () => (
 // Code block component with copy button and accessibility
 const CodeBlock: React.FC<{ code: string; language?: string; isDark: boolean }> = memo(({ code, language }) => {
   const [copied, setCopied] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = useCallback(async () => {
     if (await copyToClipboard(code)) {
@@ -153,6 +157,60 @@ const CodeBlock: React.FC<{ code: string; language?: string; isDark: boolean }> 
       setTimeout(() => setCopied(false), 2000);
     }
   }, [code]);
+
+  // Touch direction detection: allow vertical page scroll even when
+  // finger is on the code block. Only lock to horizontal scroll when
+  // the user is clearly swiping horizontally.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let startX = 0;
+    let startY = 0;
+    let directionLocked: 'horizontal' | 'vertical' | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      directionLocked = null;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+
+      if (!directionLocked) {
+        // Need a minimum movement threshold before deciding direction
+        if (dx < 3 && dy < 3) return;
+        directionLocked = dx > dy ? 'horizontal' : 'vertical';
+      }
+
+      if (directionLocked === 'vertical') {
+        // Vertical swipe: disable code block's horizontal scroll
+        // so the touch event bubbles up to the page scroller
+        el.style.overflowX = 'hidden';
+      }
+      // Horizontal swipe: default behavior (code block scrolls horizontally)
+    };
+
+    const onTouchEnd = () => {
+      // Restore horizontal scroll capability
+      el.style.overflowX = 'auto';
+      directionLocked = null;
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
 
   return (
     <div
@@ -185,7 +243,7 @@ const CodeBlock: React.FC<{ code: string; language?: string; isDark: boolean }> 
           )}
         </button>
       </div>
-      <div className="code-scroll-area" style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+      <div ref={scrollRef} className="code-scroll-area" style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
         <pre className="p-2.5 text-[13px] leading-relaxed" style={{ margin: 0, background: 'transparent' }}>
           <code className="text-gray-100" style={{ whiteSpace: 'pre', display: 'block', width: 'fit-content', minWidth: '100%' }}>{code}</code>
         </pre>
@@ -279,37 +337,112 @@ GeneratedImage.displayName = 'GeneratedImage';
 // Check if message contains generated images (markdown image syntax)
 const containsGeneratedImage = (content: string): boolean => /!\[([^\]]*)\]\(([^)]+)\)/.test(content);
 
-// Parse message content and render code blocks and images
-const renderMessageContent = (
-  content: string, 
-  isDark: boolean, 
-  onImageClick: (url: string) => void, 
-  onToast: (message: string, type: 'success' | 'error') => void
-) => {
-  const combinedRegex = /```(\w*)\n([\s\S]*?)```|!\[([^\]]*)\]\(([^)]+)\)/g;
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
-  let key = 0;
+// Markdown renderer component for AI messages
+const MarkdownContent: React.FC<{
+  content: string;
+  isDark: boolean;
+  onImageClick: (url: string) => void;
+  onToast: (message: string, type: 'success' | 'error') => void;
+}> = memo(({ content, isDark, onImageClick, onToast }) => {
+  const components: Components = useMemo(() => ({
+    // Code blocks and inline code
+    // react-markdown renders fenced code as <pre><code className="language-xxx">
+    // and inline code as just <code> without className
+    code({ className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || '');
+      const codeString = String(children).replace(/\n$/, '');
 
-  while ((match = combinedRegex.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<span key={key++} className="whitespace-pre-wrap break-words">{content.slice(lastIndex, match.index)}</span>);
-    }
-    if (match[0].startsWith('```')) {
-      parts.push(<CodeBlock key={key++} code={match[2].trim()} language={match[1] || ''} isDark={isDark} />);
-    } else if (match[0].startsWith('![')) {
-      parts.push(<GeneratedImage key={key++} url={match[4]} alt={match[3] || '生成的图片'} isDark={isDark} onImageClick={onImageClick} onToast={onToast} />);
-    }
-    lastIndex = match.index + match[0].length;
-  }
+      // Code block: has language-* class (fenced code block)
+      if (match) {
+        return (
+          <CodeBlock
+            code={codeString}
+            language={match[1]}
+            isDark={isDark}
+          />
+        );
+      }
 
-  if (lastIndex < content.length) {
-    parts.push(<span key={key++} className="whitespace-pre-wrap break-words">{content.slice(lastIndex)}</span>);
-  }
+      return (
+        <code className={`inline-code ${isDark ? 'bg-white/15' : 'bg-black/8'} px-1.5 py-0.5 rounded text-[0.9em] font-mono`} {...props}>
+          {children}
+        </code>
+      );
+    },
+    // Override pre to handle code blocks without language specification
+    pre({ children }) {
+      // If the child is already a CodeBlock (has language-* class), just pass through
+      // Otherwise, wrap the content as a code block
+      const child = React.Children.only(children) as React.ReactElement<{ className?: string; children?: React.ReactNode }>;
+      if (child && child.props?.className && /language-/.test(child.props.className)) {
+        // Already handled by the code component above
+        return <>{children}</>;
+      }
+      // Code block without language - extract text and render as CodeBlock
+      const codeText = String(child?.props?.children || '').replace(/\n$/, '');
+      return <CodeBlock code={codeText} language="" isDark={isDark} />;
+    },
+    // Images - use GeneratedImage component
+    img({ src, alt }) {
+      if (!src) return null;
+      return (
+        <GeneratedImage
+          url={src}
+          alt={alt || '生成的图片'}
+          isDark={isDark}
+          onImageClick={onImageClick}
+          onToast={onToast}
+        />
+      );
+    },
+    // Links - open in new tab
+    a({ href, children }) {
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+        >
+          {children}
+        </a>
+      );
+    },
+    // Tables
+    table({ children }) {
+      return (
+        <div className="overflow-x-auto my-2">
+          <table className={`border-collapse text-sm w-full ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+            {children}
+          </table>
+        </div>
+      );
+    },
+    th({ children }) {
+      return (
+        <th className={`border px-3 py-1.5 text-left font-semibold ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-100'}`}>
+          {children}
+        </th>
+      );
+    },
+    td({ children }) {
+      return (
+        <td className={`border px-3 py-1.5 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+          {children}
+        </td>
+      );
+    },
+  }), [isDark, onImageClick, onToast]);
 
-  return parts.length > 0 ? parts : <span className="whitespace-pre-wrap break-words">{content}</span>;
-};
+  return (
+    <div className="markdown-body">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
+MarkdownContent.displayName = 'MarkdownContent';
 
 const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({ message, isStreaming, onResend }) => {
   const isUser = message.role === 'user';
@@ -361,7 +494,14 @@ const MessageBubbleComponent: React.FC<MessageBubbleProps> = ({ message, isStrea
       if (isUser) {
         return <span className="whitespace-pre-wrap break-words">{message.content}</span>;
       }
-      return renderMessageContent(message.content, isDark, handleImageClick, handleToast);
+      return (
+        <MarkdownContent
+          content={message.content}
+          isDark={isDark}
+          onImageClick={handleImageClick}
+          onToast={handleToast}
+        />
+      );
     }
 
     // Fallback for empty content (shouldn't normally happen)

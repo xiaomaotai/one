@@ -89,20 +89,136 @@ body {
   max-width: 100%;
 }
 
-.message-content p {
-  margin-bottom: 0.75rem;
+/* Markdown body - AI message rich content */
+.markdown-body {
+  line-height: 1.7;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
-.message-content p:last-child {
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
   margin-bottom: 0;
 }
 
-.message-content code {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  font-size: 0.875em;
-  font-family: 'Fira Code', 'Consolas', monospace;
+/* Paragraphs */
+.markdown-body p {
+  margin: 0.5em 0;
+}
+
+.markdown-body p:first-child {
+  margin-top: 0;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings */
+.markdown-body h1 {
+  font-size: 1.4em;
+  font-weight: 700;
+  margin: 1em 0 0.5em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.markdown-body h2 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin: 0.9em 0 0.4em;
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.markdown-body h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+}
+
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+
+/* Lists */
+.markdown-body ul, .markdown-body ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-body ul {
+  list-style-type: disc;
+}
+
+.markdown-body ol {
+  list-style-type: decimal;
+}
+
+.markdown-body li {
+  margin: 0.2em 0;
+}
+
+.markdown-body li > p {
+  margin: 0.2em 0;
+}
+
+.markdown-body li > ul, .markdown-body li > ol {
+  margin: 0.1em 0;
+}
+
+/* Nested list styles */
+.markdown-body ul ul { list-style-type: circle; }
+.markdown-body ul ul ul { list-style-type: square; }
+
+/* Blockquotes */
+.markdown-body blockquote {
+  margin: 0.5em 0;
+  padding: 0.3em 0.8em;
+  border-left: 3px solid rgba(128, 128, 128, 0.4);
+  opacity: 0.9;
+}
+
+.markdown-body blockquote p {
+  margin: 0.2em 0;
+}
+
+/* Horizontal rule */
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+  margin: 1em 0;
+}
+
+/* Bold and italic */
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body em {
+  font-style: italic;
+}
+
+/* Strikethrough */
+.markdown-body del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Inline code - base styles (component handles theme-specific bg) */
+.markdown-body .inline-code {
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+}
+
+/* Task lists (GFM) */
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+  vertical-align: middle;
 }
 
 /* Code block container - prevent overflow */
@@ -117,7 +233,6 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 
 /* Code block scrollbar */
@@ -136,12 +251,7 @@ body {
 }
 
 .message-content pre {
-  background: rgba(0, 0, 0, 0.4);
-  padding: 1rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-  margin: 0.75rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0.5rem 0;
 }
 
 .message-content pre code {
