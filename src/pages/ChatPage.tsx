@@ -9,7 +9,7 @@
  * 
  * Requirements: 2.1, 2.2, 2.4
  */
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MessageList, MessageInput, ImageParamsPanel } from '../components/chat';
 import { useChatStore, getCurrentSession } from '../store/chat-store';
@@ -58,7 +58,172 @@ export const ChatPage: React.FC = () => {
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
 
-  // Initialize data
+  // ============================================
+  // Typewriter buffer: smoothly renders content that arrives in large bursts
+  // Many OpenAI-compatible proxies buffer the entire SSE stream and deliver
+  // it all at once. This buffer detects large jumps and feeds them to the
+  // UI incrementally so the user sees a typing animation.
+  // ============================================
+  const typewriterRef = useRef<{
+    targetContent: string;           // Full content received so far
+    displayedLength: number;         // How many chars already shown in UI
+    rafId: number | null;            // requestAnimationFrame id
+    sessionId: string | null;
+    messageId: string | null;
+    isFinished: boolean;             // Stream has ended
+    finalContent: string | null;     // Content to set when typewriter completes
+  }>({
+    targetContent: '',
+    displayedLength: 0,
+    rafId: null,
+    sessionId: null,
+    messageId: null,
+    isFinished: false,
+    finalContent: null,
+  });
+
+  // Stable refs for store actions (avoid re-creating callbacks)
+  const updateMessageRef = useRef(updateMessage);
+  updateMessageRef.current = updateMessage;
+  const setStreamingRef = useRef(setStreaming);
+  setStreamingRef.current = setStreaming;
+  const setLastSendTimeRef = useRef(setLastSendTime);
+  setLastSendTimeRef.current = setLastSendTime;
+
+  // Tick function: advances displayed content toward target
+  const typewriterTick = useCallback(() => {
+    const tw = typewriterRef.current;
+    if (!tw.sessionId || !tw.messageId) return;
+
+    const remaining = tw.targetContent.length - tw.displayedLength;
+
+    if (remaining <= 0) {
+      // Caught up with target
+      tw.rafId = null;
+      // If stream has ended and we've shown everything, finalize
+      if (tw.isFinished && tw.finalContent !== null) {
+        updateMessageRef.current(tw.sessionId, tw.messageId, {
+          content: tw.finalContent,
+          isStreaming: false,
+        });
+        setStreamingMessageId(null);
+        setStreamingRef.current(false);
+        setLastSendTimeRef.current(null);
+        tw.finalContent = null;
+      }
+      return;
+    }
+
+    // Adaptive speed: more remaining = faster output
+    // Base: 2 chars per frame, scales up with buffer size
+    const charsPerFrame = Math.max(2, Math.min(remaining, Math.ceil(remaining / 8)));
+    const newLength = Math.min(tw.displayedLength + charsPerFrame, tw.targetContent.length);
+    tw.displayedLength = newLength;
+
+    const visibleContent = tw.targetContent.slice(0, newLength);
+    updateMessageRef.current(tw.sessionId, tw.messageId, { content: visibleContent });
+
+    tw.rafId = requestAnimationFrame(typewriterTick);
+  }, []);
+
+  // Cleanup on unmount: flush all received content to store immediately
+  // so that when user comes back, they see the full content received so far.
+  // The chatManager.streamResponse() continues running independently and
+  // saves to IndexedDB. On remount, initData loads from IndexedDB.
+  useEffect(() => {
+    return () => {
+      const tw = typewriterRef.current;
+      // Stop typewriter animation
+      if (tw.rafId !== null) cancelAnimationFrame(tw.rafId);
+      tw.rafId = null;
+
+      // Flush all received content to Zustand store immediately
+      if (tw.sessionId && tw.messageId && tw.targetContent) {
+        if (tw.isFinished) {
+          // Stream already ended: save full content and mark complete
+          updateMessageRef.current(tw.sessionId, tw.messageId, {
+            content: tw.finalContent || tw.targetContent,
+            isStreaming: false,
+          });
+        } else {
+          // Stream still in progress: save all content received so far
+          // chatManager continues streaming in background and saves to IndexedDB
+          updateMessageRef.current(tw.sessionId, tw.messageId, {
+            content: tw.targetContent,
+          });
+        }
+      }
+    };
+  }, []);
+
+  // Set up chat manager callbacks with typewriter buffer
+  useEffect(() => {
+    chatManager.setCallbacks({
+      onStreamStart: (_sessionId, messageId) => {
+        // Reset typewriter state
+        const tw = typewriterRef.current;
+        if (tw.rafId !== null) cancelAnimationFrame(tw.rafId);
+        tw.targetContent = '';
+        tw.displayedLength = 0;
+        tw.rafId = null;
+        tw.sessionId = _sessionId;
+        tw.messageId = messageId;
+        tw.isFinished = false;
+        tw.finalContent = null;
+
+        setStreamingMessageId(messageId);
+        setStreaming(true);
+      },
+
+      onStreamChunk: (sessionId, messageId, _chunk, fullContent) => {
+        const tw = typewriterRef.current;
+        tw.targetContent = fullContent;
+        tw.sessionId = sessionId;
+        tw.messageId = messageId;
+
+        // If typewriter animation is not running, start it
+        if (tw.rafId === null) {
+          tw.rafId = requestAnimationFrame(typewriterTick);
+        }
+      },
+
+      onStreamEnd: (sessionId, messageId, fullContent) => {
+        const tw = typewriterRef.current;
+        tw.targetContent = fullContent;
+        tw.isFinished = true;
+        tw.finalContent = fullContent;
+
+        // If typewriter has already caught up (nothing to animate), finalize now
+        if (tw.displayedLength >= fullContent.length) {
+          if (tw.rafId !== null) cancelAnimationFrame(tw.rafId);
+          tw.rafId = null;
+          updateMessage(sessionId, messageId, { content: fullContent, isStreaming: false });
+          setStreamingMessageId(null);
+          setStreaming(false);
+          setLastSendTime(null);
+        } else {
+          // Typewriter is still animating, it will finalize when caught up
+          if (tw.rafId === null) {
+            tw.rafId = requestAnimationFrame(typewriterTick);
+          }
+        }
+      },
+
+      onStreamError: (sessionId, messageId, error) => {
+        // On error, stop typewriter and show error immediately
+        const tw = typewriterRef.current;
+        if (tw.rafId !== null) cancelAnimationFrame(tw.rafId);
+        tw.rafId = null;
+        tw.isFinished = true;
+        tw.finalContent = null;
+
+        updateMessage(sessionId, messageId, { content: `[错误] ${error}`, isStreaming: false });
+        setStreamingMessageId(null);
+        setStreaming(false);
+        setLastSendTime(null);
+      }
+    });
+  }, [updateMessage, setStreaming, setLastSendTime, typewriterTick]);
   useEffect(() => {
     const initData = async () => {
       try {
@@ -70,9 +235,11 @@ export const ChatPage: React.FC = () => {
         const loadedSessions = await chatManager.getAllSessions();
 
         // Fix any incomplete streaming messages (app was closed during streaming)
+        // Only mark as interrupted if chatManager has NO active stream for that session.
+        // If user just navigated away and came back, the stream may still be running.
         for (const session of loadedSessions) {
           for (const message of session.messages) {
-            if (message.isStreaming) {
+            if (message.isStreaming && !chatManager.isStreaming(session.id)) {
               // Mark as failed - the streaming was interrupted
               message.isStreaming = false;
               // If content is empty or just a waiting message, show error
@@ -90,6 +257,27 @@ export const ChatPage: React.FC = () => {
         }
 
         setSessions(loadedSessions);
+
+        // Restore streaming UI state if chatManager has an active stream
+        // (user navigated away and came back while AI was still responding)
+        for (const session of loadedSessions) {
+          if (chatManager.isStreaming(session.id)) {
+            const streamingMsg = session.messages.find(m => m.isStreaming);
+            if (streamingMsg) {
+              setStreamingMessageId(streamingMsg.id);
+              setStreaming(true);
+              // Initialize typewriter with current content so it doesn't re-animate
+              const tw = typewriterRef.current;
+              tw.sessionId = session.id;
+              tw.messageId = streamingMsg.id;
+              tw.targetContent = streamingMsg.content || '';
+              tw.displayedLength = tw.targetContent.length; // Skip to current position
+              tw.isFinished = false;
+              tw.finalContent = null;
+            }
+            break;
+          }
+        }
 
         // Set current session if there's one, or create a new one if we have configs
         if (loadedSessions.length > 0 && !currentSessionId) {
@@ -129,44 +317,21 @@ export const ChatPage: React.FC = () => {
     }
   }, [location.pathname, setConfigs]);
 
-  // Set up chat manager callbacks
-  useEffect(() => {
-    chatManager.setCallbacks({
-      onStreamStart: (_sessionId, messageId) => {
-        setStreamingMessageId(messageId);
-        setStreaming(true);
-      },
-      onStreamChunk: (sessionId, messageId, _chunk, fullContent) => {
-        updateMessage(sessionId, messageId, { content: fullContent });
-      },
-      onStreamEnd: (sessionId, messageId, fullContent) => {
-        updateMessage(sessionId, messageId, { content: fullContent, isStreaming: false });
-        setStreamingMessageId(null);
-        setStreaming(false);
-        setLastSendTime(null);  // Clear send time when conversation ends
-      },
-      onStreamError: (sessionId, messageId, error) => {
-        updateMessage(sessionId, messageId, { content: `[错误] ${error}`, isStreaming: false });
-        setStreamingMessageId(null);
-        setStreaming(false);
-        setLastSendTime(null);  // Clear send time when conversation ends
-      }
-    });
-  }, [updateMessage, setStreaming, setLastSendTime]);
-
   // Handle stop streaming
   const handleStopStreaming = useCallback(async () => {
     if (currentSessionId && streamingMessageId) {
+      // Stop typewriter animation
+      const tw = typewriterRef.current;
+      if (tw.rafId !== null) cancelAnimationFrame(tw.rafId);
+      tw.rafId = null;
+      tw.isFinished = true;
+      tw.finalContent = null;
+
       chatManager.cancelStream(currentSessionId);
-      // 更新消息显示已终止
-      const session = await chatManager.getSession(currentSessionId);
-      if (session) {
-        const message = session.messages.find(m => m.id === streamingMessageId);
-        if (message) {
-          const content = message.content ? message.content + '\n\n[已终止]' : '[已终止]';
-          updateMessage(currentSessionId, streamingMessageId, { content, isStreaming: false });
-        }
-      }
+      // Show content accumulated so far + terminated marker
+      const currentContent = tw.targetContent || '';
+      const content = currentContent ? currentContent + '\n\n[已终止]' : '[已终止]';
+      updateMessage(currentSessionId, streamingMessageId, { content, isStreaming: false });
       setStreamingMessageId(null);
       setStreaming(false);
     }
@@ -206,30 +371,24 @@ export const ChatPage: React.FC = () => {
       const isImageMode = config?.provider === 'image-generation';
 
       // Send message with images and image params (for image generation mode)
-      const userMessage = await chatManager.sendMessage(
+      const { userMessage, assistantMessage } = await chatManager.sendMessage(
         sessionId,
         content,
         images,
         isImageMode ? imageParams : undefined
       );
 
-      // Add user message to store
+      // Add both messages to store immediately (synchronous Zustand updates)
+      // This MUST happen before any streaming chunks arrive to avoid the race
+      // condition where updateMessage can't find the assistant message in store.
       addMessage(sessionId, userMessage);
+      addMessage(sessionId, assistantMessage);
 
       // If this was the first message, update the session title in store
       if (isFirstMessage || isNewSession) {
         const updatedSession = await chatManager.getSession(sessionId);
         if (updatedSession && updatedSession.title !== '新对话') {
           updateSession(sessionId, { title: updatedSession.title });
-        }
-      }
-
-      // Add placeholder for assistant message
-      const updatedSession = await chatManager.getSession(sessionId);
-      if (updatedSession) {
-        const assistantMessage = updatedSession.messages[updatedSession.messages.length - 1];
-        if (assistantMessage && assistantMessage.role === 'assistant') {
-          addMessage(sessionId, assistantMessage);
         }
       }
     } catch (error) {
